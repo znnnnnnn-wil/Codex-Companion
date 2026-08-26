@@ -76,3 +76,7 @@ Codex Desktop
 ## 非目标
 
 项目没有远程桌面、终端、任意文件操作、通用鼠标键盘、Claude/Gemini、多 Agent、Git UI 或企业权限系统。
+
+## 许可证
+
+本项目采用 [MIT License](LICENSE) 开源。
