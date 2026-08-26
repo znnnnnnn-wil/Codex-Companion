@@ -1,0 +1,21 @@
+# Sanitized Codex Desktop UIA tree excerpt
+# Full local capture: dotnet run -- inspect-ui --output <private-path>
+# Message text, prompts, command output and source code are intentionally omitted.
+
+Window Name="ChatGPT" AutomationId="" ClassName="Chrome_WidgetWin_1" IsEnabled=True IsOffscreen=False
+  Pane Name="ChatGPT" AutomationId="" ClassName="RootView" IsEnabled=True IsOffscreen=False
+    Pane Name="Chrome Legacy Window" AutomationId="48" ClassName="Chrome_RenderWidgetHostHWND" IsEnabled=True IsOffscreen=False
+      Document Name="Codex" AutomationId="RootWebArea" ClassName="" IsEnabled=True IsOffscreen=False
+        Group Name="<workspace-name>" AutomationId="" ClassName="group/cwd relative flex flex-col" IsEnabled=True IsOffscreen=False
+          List Name="<workspace-name>中的已安排任务" AutomationId="" ClassName="flex flex-col" IsEnabled=True IsOffscreen=False
+            ListItem Name="<thread-title>" AutomationId="" ClassName="after:block ..." IsEnabled=True IsOffscreen=False
+              Button Name="<thread-title>" AutomationId="" ClassName="group relative cursor-interaction text-sm ... sidebar-item ... bg-primary-ghost-hover" IsEnabled=True IsOffscreen=False
+        Edit Name="使用 ChatGPT Work" AutomationId="" ClassName="ProseMirror" IsEnabled=True IsOffscreen=False
+        Button Name="停止" AutomationId="" ClassName="... bg-primary-solid ..." IsEnabled=True IsOffscreen=False
+        # Idle + non-empty composer exposes Button Name="发送" with InvokePattern.
+  Pane Name="" AutomationId="" ClassName="RootView" IsEnabled=True IsOffscreen=False
+    Button Name="最小化" AutomationId="view_1" ClassName="ChromeNodeCaptionButton" IsEnabled=True IsOffscreen=False
+    Button Name="最大化" AutomationId="view_2" ClassName="ChromeNodeCaptionButton" IsEnabled=True IsOffscreen=False
+    Button Name="关闭" AutomationId="view_4" ClassName="ChromeNodeCaptionButton" IsEnabled=True IsOffscreen=False
+
+# Actual full-tree node count during probe: 2438

@@ -1,0 +1,11 @@
+.git
+.gitignore
+.tools
+.env
+**/node_modules
+**/dist
+**/bin
+**/obj
+**/coverage
+**/*.log
+apps/web/src/assets/hero.png

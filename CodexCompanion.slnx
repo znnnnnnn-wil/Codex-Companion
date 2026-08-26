@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/apps/" />
+  <Folder Name="/apps/bridge/">
+    <Project Path="apps/bridge/CodexCompanion.Bridge.csproj" />
+  </Folder>
+  <Folder Name="/apps/bridge/tests/">
+    <Project Path="apps/bridge/tests/CodexCompanion.Bridge.Tests/CodexCompanion.Bridge.Tests.csproj" />
+  </Folder>
+</Solution>
