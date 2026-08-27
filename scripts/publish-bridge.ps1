@@ -32,8 +32,13 @@ if ($LASTEXITCODE -ne 0) {
     throw "Bridge publish failed with exit code $LASTEXITCODE"
 }
 
-Copy-Item (Join-Path $root 'scripts\install-bridge.ps1') $output
-Copy-Item (Join-Path $root 'scripts\uninstall-bridge.ps1') $output
+$utf8WithBom = [System.Text.UTF8Encoding]::new($true)
+foreach ($scriptName in @('install-bridge.ps1', 'uninstall-bridge.ps1')) {
+    $sourcePath = Join-Path $root "scripts\$scriptName"
+    $targetPath = Join-Path $output $scriptName
+    $scriptContent = [System.IO.File]::ReadAllText($sourcePath, [System.Text.Encoding]::UTF8)
+    [System.IO.File]::WriteAllText($targetPath, $scriptContent, $utf8WithBom)
+}
 @"
 Codex Companion Bridge $Version
 

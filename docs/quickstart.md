@@ -7,6 +7,7 @@ Codex Companion 有两种部署方式。个人首次体验建议使用 IP 快速
 两种模式都需要：
 
 - 一台 Windows 10/11 电脑
+- Windows PowerShell 5.1 或 PowerShell 7
 - 已安装并登录 Codex Desktop
 - 已安装 Codex CLI（Bridge 需要独立的 `codex.exe`，不能直接使用 MSIX 包内的受保护文件）
 - 一台可以被 Windows 电脑主动访问的 Linux VPS
@@ -50,11 +51,18 @@ bash scripts/install-server.sh --host 你的VPS公网IP
 
 在 Windows 上安装 Bridge：
 
-1. 从 GitHub Releases 下载 `CodexCompanion-Bridge-win-x64-*.zip` 并解压。
-2. 在解压目录打开 PowerShell，执行 `Set-ExecutionPolicy -Scope Process Bypass`。
-3. 执行 `./install-bridge.ps1`，按提示填写 `ws://你的VPS公网IP/ws/bridge`。
+1. 从 GitHub Releases 下载最新的 `CodexCompanion-Bridge-win-x64-*.zip` 并解压。
+2. 在解压目录打开 PowerShell，执行 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./install-bridge.ps1`。也可以在 PowerShell 7 中执行 `pwsh -File ./install-bridge.ps1`。
+3. 按提示填写 `ws://你的VPS公网IP/ws/bridge`。
 4. 首次安装脚本会在当前窗口运行 Bridge 并显示配对码。
 5. 在手机打开 `http://你的VPS公网IP`，输入配对码；完成后回到 PowerShell 按 Enter，安装脚本会创建登录时自动启动的任务。
+
+Bridge 发布包中的安装脚本使用带 BOM 的 UTF-8 编码，同时支持 Windows PowerShell 5.1 和 PowerShell 7。`v0.1.1` 的 ZIP 安装脚本缺少 BOM，在 Windows PowerShell 5.1 中可能报告 `TerminatorExpectedAtEndOfString`。遇到此错误时请升级到修复后的版本；升级前也可以在解压目录直接完成配置和配对：
+
+```powershell
+./CodexCompanion.Bridge.exe setup
+./CodexCompanion.Bridge.exe run
+```
 
 如果仓库还没有可用的 Release，开发者可以在源码目录执行 `./scripts/publish-bridge.ps1 -Version dev` 生成同样的 ZIP 包。
 
