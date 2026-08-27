@@ -7,7 +7,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $packageRoot = (Resolve-Path -LiteralPath $PackageDirectory).Path
 
-foreach ($scriptName in @('install-bridge.ps1', 'uninstall-bridge.ps1')) {
+foreach ($scriptName in @('install-bridge.ps1', 'uninstall-bridge.ps1', 'bridge-control.ps1')) {
     $scriptPath = Join-Path $packageRoot $scriptName
     if (-not (Test-Path -LiteralPath $scriptPath)) {
         throw "Bridge package is missing $scriptName"

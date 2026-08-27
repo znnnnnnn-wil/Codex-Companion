@@ -33,7 +33,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $utf8WithBom = [System.Text.UTF8Encoding]::new($true)
-foreach ($scriptName in @('install-bridge.ps1', 'uninstall-bridge.ps1')) {
+foreach ($scriptName in @('install-bridge.ps1', 'uninstall-bridge.ps1', 'bridge-control.ps1')) {
     $sourcePath = Join-Path $root "scripts\$scriptName"
     $targetPath = Join-Path $output $scriptName
     $scriptContent = [System.IO.File]::ReadAllText($sourcePath, [System.Text.Encoding]::UTF8)
@@ -44,8 +44,10 @@ Codex Companion Bridge $Version
 
 1. Install Codex CLI separately, or set its path during setup.
 2. Run .\install-bridge.ps1 from an interactive PowerShell window.
-3. The installer runs Bridge setup and creates a per-user logon task.
-4. Run .\uninstall-bridge.ps1 to remove the task and installed files.
+3. Bridge is stopped by default after installation. Use bridge-control.ps1 -Action Start or the Start menu shortcut.
+4. Autostart is optional: bridge-control.ps1 -Action EnableAutostart.
+5. Use bridge-control.ps1 -Action Stop to stop Bridge.
+6. Run .\uninstall-bridge.ps1 to remove the task and installed files.
 
 The package does not contain Codex CLI. It only contains the self-contained Bridge.
 "@ | Set-Content (Join-Path $output 'README.txt') -Encoding UTF8
