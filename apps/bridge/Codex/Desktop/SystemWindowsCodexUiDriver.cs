@@ -333,8 +333,12 @@ public sealed class SystemWindowsCodexUiDriver(ILogger<SystemWindowsCodexUiDrive
                         new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Document),
                         new PropertyCondition(AutomationElement.AutomationIdProperty, "RootWebArea"));
                     var document = window.FindFirst(TreeScope.Descendants, documentCondition);
-                    if (document is not null
-                        && string.Equals(document.Current.Name, "Codex", StringComparison.OrdinalIgnoreCase))
+                    // The packaged desktop app has used both "Codex" and
+                    // "ChatGPT" as the RootWebArea name across releases. The
+                    // executable package identity and RootWebArea AutomationId
+                    // are the stable signals, so do not reject a valid window
+                    // solely because its localized/product name changed.
+                    if (document is not null)
                     {
                         return window;
                     }
