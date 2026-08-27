@@ -16,6 +16,9 @@ jobs:
       - name: Publish Bridge
         shell: pwsh
         run: ./scripts/publish-bridge.ps1 -Runtime win-x64 -Version '${{ github.ref_name }}'
+      - name: Validate Windows PowerShell 5.1 compatibility
+        shell: powershell
+        run: ./scripts/test-bridge-package.ps1 -PackageDirectory '.artifacts/bridge-win-x64-${{ github.ref_name }}'
       - name: Install Inno Setup
         shell: pwsh
         run: choco install innosetup --no-progress -y
