@@ -22,3 +22,34 @@ jobs:
           files: |
             .artifacts/CodexCompanion-Bridge-win-x64-${{ github.ref_name }}.zip
             .artifacts/CodexCompanion-Bridge-win-x64-${{ github.ref_name }}.zip.sha256
+
+  images:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push Relay image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: services/relay/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/znnnnnnn-wil/codex-companion-relay:${{ github.ref_name }}
+            ghcr.io/znnnnnnn-wil/codex-companion-relay:latest
+      - name: Build and push Web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/znnnnnnn-wil/codex-companion-web:${{ github.ref_name }}
+            ghcr.io/znnnnnnn-wil/codex-companion-web:latest

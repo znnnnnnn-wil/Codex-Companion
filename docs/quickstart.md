@@ -53,6 +53,14 @@ curl http://你的VPS公网IP/healthz
 
 VPS 防火墙只需要放行 TCP 80。PostgreSQL 和 Relay 不直接暴露公网端口。
 
+如果希望使用 GitHub Container Registry 的预构建镜像，可将启动命令替换为：
+
+```bash
+docker compose -f compose.yml -f deploy/docker-compose.images.yml up -d
+```
+
+首次发布前或需要使用本地代码时，继续使用前面的 `--build` 命令。
+
 ## 模式 B：域名 HTTPS 模式
 
 此模式适合长期运行。需要一个解析到 VPS 的域名，并确保 TCP 80/443 可以从公网访问。Caddy 会自动申请和续期证书，并代理 WebSocket。
@@ -78,6 +86,13 @@ ALLOWED_ORIGINS=companion.example.com,localhost
 docker compose -f compose.yml -f deploy/docker-compose.https.yml up -d --build
 docker compose ps
 curl https://companion.example.com/healthz
+```
+
+使用 GHCR 预构建镜像时，增加镜像覆盖文件并先拉取：
+
+```bash
+docker compose -f compose.yml -f deploy/docker-compose.images.yml -f deploy/docker-compose.https.yml pull
+docker compose -f compose.yml -f deploy/docker-compose.images.yml -f deploy/docker-compose.https.yml up -d
 ```
 
 Windows Bridge 使用：
@@ -115,7 +130,10 @@ Windows 上执行：
 
 ```powershell
 CodexCompanion.Bridge.exe doctor
+CodexCompanion.Bridge.exe doctor --json
 ```
+
+`--json` 适合安装器、自动化脚本和提交诊断信息；输出不会包含 Bridge 凭据内容。
 
 服务器上执行：
 

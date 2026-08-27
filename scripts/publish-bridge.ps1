@@ -18,8 +18,15 @@ if (Test-Path -LiteralPath $output) {
 }
 New-Item -ItemType Directory -Path $output -Force | Out-Null
 
-& $dotnet publish (Join-Path $root 'apps\bridge\CodexCompanion.Bridge.csproj') `
+$project = Join-Path $root 'apps\bridge\CodexCompanion.Bridge.csproj'
+& $dotnet restore $project --runtime $Runtime
+if ($LASTEXITCODE -ne 0) {
+    throw "Bridge restore failed with exit code $LASTEXITCODE"
+}
+
+& $dotnet publish $project `
     --configuration Release --runtime $Runtime --self-contained true `
+    --no-restore `
     --output $output
 if ($LASTEXITCODE -ne 0) {
     throw "Bridge publish failed with exit code $LASTEXITCODE"

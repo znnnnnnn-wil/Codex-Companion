@@ -1,0 +1,10 @@
+services:
+  relay:
+    image: ${RELAY_IMAGE:-ghcr.io/znnnnnnn-wil/codex-companion-relay:latest}
+    pull_policy: always
+    build: !reset null
+
+  web:
+    image: ${WEB_IMAGE:-ghcr.io/znnnnnnn-wil/codex-companion-web:latest}
+    pull_policy: always
+    build: !reset null

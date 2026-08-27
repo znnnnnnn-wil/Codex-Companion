@@ -5,6 +5,7 @@ Codex Companion 是一个连接 Windows Codex Desktop 的个人自托管伴侣�
 ## 当前已实现
 
 - .NET 10 Bridge：真实 `thread/list` / `thread/read` / `thread/start`、容错 parser、UIA tree inspector、title+workspace 消歧、Desktop 语义化发送、真实历史确认、Relay reconnect、DPAPI 凭据和增量 polling。
+- Bridge 提供 `setup` 配置向导、`doctor` / `doctor --json` 诊断和 Windows 登录自启动安装脚本。
 - Go Relay：WebSocket 单体路由、pairing、256-bit credential hash、在线状态、request correlation、PostgreSQL Store、消息类型 allowlist。
 - React/Vite 客户端：移动优先聊天、按项目新建会话、侧栏抽屉、Markdown/GFM/code block、自动滚动、pending→confirmed 对账、PC/Codex 状态、错误文案和指数重连；同一份构建产物由 Capacitor 打包进 Android APK。
 - 测试：Relay routing/auth/pairing/disconnect/correlation，Bridge parser/UI abstraction/send timeout，Web store/reconnect；另有真实端到端脚本。

@@ -10,6 +10,7 @@ using CodexCompanion.Bridge.Configuration;
 using CodexCompanion.Bridge.Pairing;
 using CodexCompanion.Bridge.Relay;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CodexCompanion.Bridge;
 
@@ -54,7 +55,7 @@ public static class Program
                 "inspect-ui" => await RunInspectorAsync(args),
                 "status" => RunStatus(loggerFactory),
                 "setup" => RunSetup(configuration),
-                "doctor" => await RunDoctorAsync(configuration, loggerFactory),
+                "doctor" => await RunDoctorAsync(args, configuration, loggerFactory),
                 "send" => await RunSendAsync(args, configuration, loggerFactory),
                 "stop" => await RunStopAsync(args, configuration, loggerFactory),
                 "run" => await RunBridgeAsync(configuration, loggerFactory),
@@ -268,13 +269,19 @@ public static class Program
         return string.IsNullOrWhiteSpace(value) ? current ?? string.Empty : value.Trim();
     }
 
-    private static async Task<int> RunDoctorAsync(BridgeConfiguration configuration, ILoggerFactory loggerFactory)
+    private sealed record DoctorCheck(string Name, bool Ok, bool Warning, string Message);
+
+    private static async Task<int> RunDoctorAsync(
+        string[] args,
+        BridgeConfiguration configuration,
+        ILoggerFactory loggerFactory)
     {
         var failed = false;
+        var json = args.Skip(1).Any(value => value.Equals("--json", StringComparison.OrdinalIgnoreCase));
+        var checks = new List<DoctorCheck>();
         void Report(string name, bool ok, string message, bool warning = false)
         {
-            var status = ok ? "PASS" : warning ? "WARN" : "FAIL";
-            Console.WriteLine($"[{status}] {name}: {message}");
+            checks.Add(new DoctorCheck(name, ok, warning, message));
             failed |= !ok && !warning;
         }
 
@@ -313,8 +320,11 @@ public static class Program
 
             try
             {
+                var diagnosticLogger = json
+                    ? NullLoggerFactory.Instance
+                    : loggerFactory;
                 await using var appServer = await CodexAppServerClient.StartAsync(
-                    executable, loggerFactory.CreateLogger<CodexAppServerClient>(),
+                    executable, diagnosticLogger.CreateLogger<CodexAppServerClient>(),
                     new CancellationTokenSource(TimeSpan.FromSeconds(15)).Token);
                 Report("Codex app-server", true, "初始化成功");
             }
@@ -346,6 +356,23 @@ public static class Program
             catch (Exception exception)
             {
                 Report("Relay 网络/WSS", false, exception.Message);
+            }
+        }
+
+        if (json)
+        {
+            Console.WriteLine(JsonSerializer.Serialize(new
+            {
+                ok = !failed,
+                checks
+            }, JsonOptions));
+        }
+        else
+        {
+            foreach (var check in checks)
+            {
+                var status = check.Ok ? "PASS" : check.Warning ? "WARN" : "FAIL";
+                Console.WriteLine($"[{status}] {check.Name}: {check.Message}");
             }
         }
 
@@ -382,7 +409,7 @@ public static class Program
               inspect-ui [--output <path>]
               status
               setup
-              doctor
+              doctor [--json]
               send <thread-id> <message> [--attach <path>]...
               stop <thread-id>
               run
