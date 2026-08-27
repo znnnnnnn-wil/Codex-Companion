@@ -26,20 +26,27 @@ cd /opt/codex-companion
 cp .env.example .env
 ```
 
-编辑 `.env`，至少设置：
+编辑 `.env`，快速模式只需要设置：
 
 ```env
-POSTGRES_PASSWORD=生成一个随机长密码
 ALLOWED_ORIGINS=你的VPS公网IP
 ```
 
 启动服务：
 
 ```bash
-docker compose up -d --build
+docker compose -f deploy/docker-compose.quick.yml up -d --build
 docker compose ps
 curl http://你的VPS公网IP/healthz
 ```
+
+此模式使用 Relay 内存存储，不需要 PostgreSQL；Relay 重启后需要重新配对。也可以在仓库目录直接运行一键脚本：
+
+```bash
+bash scripts/install-server.sh --host 你的VPS公网IP
+```
+
+如果服务器能正确返回公网地址，也可以省略 `--host`；脚本会尝试自动探测。
 
 在 Windows 上安装 Bridge：
 
@@ -58,6 +65,16 @@ VPS 防火墙只需要放行 TCP 80。PostgreSQL 和 Relay 不直接暴露公网
 ```bash
 docker compose -f compose.yml -f deploy/docker-compose.images.yml up -d
 ```
+
+快速模式也可以直接使用预构建镜像（仍然不需要 PostgreSQL）：
+
+```bash
+docker compose -f deploy/docker-compose.quick.yml -f deploy/docker-compose.images.yml pull
+docker compose -f deploy/docker-compose.quick.yml -f deploy/docker-compose.images.yml up -d
+```
+
+首次使用 GHCR 前，请在仓库的 **Packages** 页面将 `codex-companion-relay` 和
+`codex-companion-web` 设置为 **Public**；否则 VPS 拉取镜像时需要配置 GitHub Container Registry 登录凭据。
 
 首次发布前或需要使用本地代码时，继续使用前面的 `--build` 命令。
 
@@ -86,6 +103,12 @@ ALLOWED_ORIGINS=companion.example.com,localhost
 docker compose -f compose.yml -f deploy/docker-compose.https.yml up -d --build
 docker compose ps
 curl https://companion.example.com/healthz
+```
+
+也可以使用一键脚本完成配置和启动：
+
+```bash
+bash scripts/install-server.sh --domain companion.example.com
 ```
 
 使用 GHCR 预构建镜像时，增加镜像覆盖文件并先拉取：
@@ -122,6 +145,12 @@ cd /opt/codex-companion
 docker compose -f compose.yml -f deploy/docker-compose.https.yml up -d --build
 ```
 
+使用预构建镜像时，脚本命令为：
+
+```bash
+bash scripts/install-server.sh --domain companion.example.com --images
+```
+
 更新前先备份 PostgreSQL 数据卷。不要删除 `codex-companion-postgres`，否则会丢失设备配对信息。
 
 ## 常见诊断
@@ -142,3 +171,14 @@ docker compose ps
 docker compose logs --tail=100 relay
 docker compose logs --tail=100 web
 ```
+
+## 干净环境验收
+
+发布新版本后，建议在一台没有项目缓存的机器上按下面顺序验收：
+
+1. VPS 使用 `bash scripts/install-server.sh`（IP 快速模式）或 `--domain <域名> --https`（HTTPS 模式）初始化，并确认 `/healthz` 返回 `200`。
+2. Windows 下载 Release 中的 Bridge ZIP 或 GUI 安装器，确认无需安装 .NET SDK 即可启动；Codex CLI 仍需单独安装。
+3. 运行 `setup`，确认 Relay 地址、Codex CLI 路径和诊断结果均正确；随后运行 `install-bridge.ps1` 创建登录自启动任务。
+4. 在手机打开网页，扫描 Bridge 终端二维码（或手动输入 8 位配对码），确认自动进入项目列表。
+5. 重启 Windows，确认 Bridge 自动启动并能在 Relay 重启后自动重连。
+6. 快速模式重启 Relay 后应重新配对；HTTPS 模式重启 Relay 后应保留 PostgreSQL 中的设备凭据。

@@ -54,7 +54,7 @@ public static class Program
                 "thread" => await RunThreadAsync(args, configuration, loggerFactory),
                 "inspect-ui" => await RunInspectorAsync(args),
                 "status" => RunStatus(loggerFactory),
-                "setup" => RunSetup(configuration),
+                "setup" => await RunSetupAsync(configuration, loggerFactory),
                 "doctor" => await RunDoctorAsync(args, configuration, loggerFactory),
                 "send" => await RunSendAsync(args, configuration, loggerFactory),
                 "stop" => await RunStopAsync(args, configuration, loggerFactory),
@@ -237,7 +237,7 @@ public static class Program
     private static LogLevel ParseLogLevel(string? value)
         => Enum.TryParse<LogLevel>(value, true, out var level) ? level : LogLevel.Warning;
 
-    private static int RunSetup(BridgeConfiguration configuration)
+    private static async Task<int> RunSetupAsync(BridgeConfiguration configuration, ILoggerFactory loggerFactory)
     {
         Console.WriteLine($"配置文件：{configuration.FilePath}");
         var relay = Prompt("Relay 地址", configuration.RelayUrl);
@@ -258,6 +258,54 @@ public static class Program
         configuration.CredentialPath = string.IsNullOrWhiteSpace(credential) ? null : Path.GetFullPath(credential.Trim());
         configuration.Save();
         Console.WriteLine("配置已保存。首次运行 Bridge 后，终端会显示配对码。");
+
+        Console.WriteLine("正在检查本机环境（检查失败不会阻止配置保存）...");
+        string? resolvedExecutable = null;
+        try
+        {
+            resolvedExecutable = new CodexExecutableResolver().Resolve(configuration.CodexExecutable);
+            Console.WriteLine($"[PASS] Codex CLI：{resolvedExecutable}");
+            var version = await ReadProcessOutputAsync(resolvedExecutable, "--version");
+            Console.WriteLine($"[PASS] Codex 版本：{version.Trim()}");
+        }
+        catch (Exception exception)
+        {
+            Console.WriteLine($"[WARN] Codex CLI：{exception.Message}");
+        }
+
+        if (resolvedExecutable is not null)
+        {
+            try
+            {
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+                await using var appServer = await CodexAppServerClient.StartAsync(
+                    resolvedExecutable,
+                    loggerFactory.CreateLogger<CodexAppServerClient>(),
+                    timeout.Token);
+                Console.WriteLine("[PASS] Codex app-server：初始化成功");
+            }
+            catch (Exception exception)
+            {
+                Console.WriteLine($"[WARN] Codex app-server：{exception.Message}");
+            }
+        }
+
+        if (BridgeConfiguration.IsValidRelayUri(configuration.RelayUrl ?? string.Empty, out var relayUri)
+            && relayUri is not null)
+        {
+            try
+            {
+                using var socket = new ClientWebSocket();
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+                await socket.ConnectAsync(relayUri, timeout.Token);
+                await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "setup", CancellationToken.None);
+                Console.WriteLine("[PASS] Relay 网络/WSS：WebSocket 可达");
+            }
+            catch (Exception exception)
+            {
+                Console.WriteLine($"[WARN] Relay 网络/WSS：{exception.Message}");
+            }
+        }
         return 0;
     }
 

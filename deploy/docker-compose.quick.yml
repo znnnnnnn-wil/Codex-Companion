@@ -1,0 +1,43 @@
+services:
+  relay:
+    build:
+      context: ..
+      dockerfile: services/relay/Dockerfile
+      args:
+        GOPROXY: ${GOPROXY:-https://proxy.golang.org,direct}
+    restart: unless-stopped
+    environment:
+      RELAY_ADDR: :8080
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:?ALLOWED_ORIGINS is required}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+    networks:
+      - backend
+
+  web:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+      args:
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org}
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      relay:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+    networks:
+      - backend
+
+networks:
+  backend:
+    driver: bridge

@@ -1,0 +1,21 @@
+name: Compose Smoke Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate quick Compose file
+        run: docker compose -f deploy/docker-compose.quick.yml config
+        env:
+          ALLOWED_ORIGINS: localhost
+      - name: Run server smoke test
+        run: bash scripts/smoke-compose.sh

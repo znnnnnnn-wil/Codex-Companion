@@ -16,12 +16,21 @@ jobs:
       - name: Publish Bridge
         shell: pwsh
         run: ./scripts/publish-bridge.ps1 -Runtime win-x64 -Version '${{ github.ref_name }}'
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress -y
+      - name: Build GUI installer
+        shell: pwsh
+        run: |
+          $payload = (Resolve-Path '.artifacts/bridge-win-x64-${{ github.ref_name }}').Path
+          & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' '/DVersion=${{ github.ref_name }}' "/DPayloadDir=$payload" 'installer/CodexCompanionBridge.iss'
       - name: Upload Bridge package
         uses: softprops/action-gh-release@v2
         with:
           files: |
             .artifacts/CodexCompanion-Bridge-win-x64-${{ github.ref_name }}.zip
             .artifacts/CodexCompanion-Bridge-win-x64-${{ github.ref_name }}.zip.sha256
+            .artifacts/CodexCompanion-Bridge-Setup-win-x64-${{ github.ref_name }}.exe
 
   images:
     runs-on: ubuntu-latest

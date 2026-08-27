@@ -6,6 +6,7 @@ using CodexCompanion.Bridge.Codex.History;
 using CodexCompanion.Bridge.Codex.Models;
 using CodexCompanion.Bridge.Pairing;
 using Microsoft.Extensions.Logging;
+using QRCoder;
 
 namespace CodexCompanion.Bridge.Relay;
 
@@ -71,6 +72,23 @@ public sealed class BridgeRelayClient(
             credentialStore.Save(credential);
             deviceId = pairing.DeviceId;
             Console.WriteLine($"Codex Companion 配对码：{pairing.Code}（10 分钟内有效）");
+            var pageUri = new UriBuilder(relayUri)
+            {
+                Scheme = relayUri.Scheme.Equals("wss", StringComparison.OrdinalIgnoreCase) ? "https" : "http",
+                Path = "/",
+                Query = $"pair={Uri.EscapeDataString(pairing.Code)}"
+            }.Uri;
+            Console.WriteLine($"手机配对地址：{pageUri}");
+            try
+            {
+                using var generator = new QRCodeGenerator();
+                using var data = generator.CreateQrCode(pageUri.ToString(), QRCodeGenerator.ECCLevel.M);
+                Console.WriteLine(new AsciiQRCode(data).GetGraphic(1));
+            }
+            catch (Exception exception)
+            {
+                logger.LogDebug(exception, "Unable to render pairing QR code");
+            }
         }
         else
         {
