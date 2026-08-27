@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 using CodexCompanion.Bridge.Codex.AppServer;
@@ -22,9 +24,10 @@ public static class Program
     public static async Task<int> Main(string[] args)
     {
         Console.OutputEncoding = Encoding.UTF8;
+        var configuration = BridgeConfiguration.Load();
         using var loggerFactory = LoggerFactory.Create(builder =>
         {
-            builder.SetMinimumLevel(ParseLogLevel(Environment.GetEnvironmentVariable("CODEX_COMPANION_LOG_LEVEL")));
+            builder.SetMinimumLevel(ParseLogLevel(configuration.LogLevel));
             builder.AddSimpleConsole(options =>
             {
                 options.SingleLine = true;
@@ -46,13 +49,15 @@ public static class Program
                 "threads" => await RunWithHistoryAsync(async adapter =>
                 {
                     Console.WriteLine(JsonSerializer.Serialize(await adapter.ListThreadsAsync(), JsonOptions));
-                }, loggerFactory),
-                "thread" => await RunThreadAsync(args, loggerFactory),
+                }, configuration, loggerFactory),
+                "thread" => await RunThreadAsync(args, configuration, loggerFactory),
                 "inspect-ui" => await RunInspectorAsync(args),
                 "status" => RunStatus(loggerFactory),
-                "send" => await RunSendAsync(args, loggerFactory),
-                "stop" => await RunStopAsync(args, loggerFactory),
-                "run" => await RunBridgeAsync(loggerFactory),
+                "setup" => RunSetup(configuration),
+                "doctor" => await RunDoctorAsync(configuration, loggerFactory),
+                "send" => await RunSendAsync(args, configuration, loggerFactory),
+                "stop" => await RunStopAsync(args, configuration, loggerFactory),
+                "run" => await RunBridgeAsync(configuration, loggerFactory),
                 _ => throw new ArgumentException($"未知命令：{args[0]}")
             };
         }
@@ -80,7 +85,7 @@ public static class Program
         }
     }
 
-    private static async Task<int> RunThreadAsync(string[] args, ILoggerFactory loggerFactory)
+    private static async Task<int> RunThreadAsync(string[] args, BridgeConfiguration configuration, ILoggerFactory loggerFactory)
     {
         if (args.Length != 2)
         {
@@ -89,7 +94,7 @@ public static class Program
         return await RunWithHistoryAsync(async adapter =>
         {
             Console.WriteLine(JsonSerializer.Serialize(await adapter.ReadThreadAsync(args[1]), JsonOptions));
-        }, loggerFactory);
+        }, configuration, loggerFactory);
     }
 
     private static async Task<int> RunInspectorAsync(string[] args)
@@ -125,7 +130,7 @@ public static class Program
         return 0;
     }
 
-    private static async Task<int> RunSendAsync(string[] args, ILoggerFactory loggerFactory)
+    private static async Task<int> RunSendAsync(string[] args, BridgeConfiguration configuration, ILoggerFactory loggerFactory)
     {
         if (args.Length < 3)
         {
@@ -158,10 +163,10 @@ public static class Program
             var coordinator = new MessageSendCoordinator(history, desktop);
             var result = await coordinator.SendAndConfirmAsync(threadId, text, attachmentPaths);
             Console.WriteLine(JsonSerializer.Serialize(result, JsonOptions));
-        }, loggerFactory);
+        }, configuration, loggerFactory);
     }
 
-    private static async Task<int> RunStopAsync(string[] args, ILoggerFactory loggerFactory)
+    private static async Task<int> RunStopAsync(string[] args, BridgeConfiguration configuration, ILoggerFactory loggerFactory)
     {
         if (args.Length != 2)
         {
@@ -176,10 +181,10 @@ public static class Program
             var desktop = new CodexDesktopAdapter(driver);
             await desktop.StopAsync(thread);
             Console.WriteLine(JsonSerializer.Serialize(new { threadId = thread.ThreadId, stopped = true }, JsonOptions));
-        }, loggerFactory);
+        }, configuration, loggerFactory);
     }
 
-    private static async Task<int> RunBridgeAsync(ILoggerFactory loggerFactory)
+    private static async Task<int> RunBridgeAsync(BridgeConfiguration configuration, ILoggerFactory loggerFactory)
     {
         using var cancellation = new CancellationTokenSource();
         ConsoleCancelEventHandler handler = (_, eventArgs) =>
@@ -190,7 +195,7 @@ public static class Program
         Console.CancelKeyPress += handler;
         try
         {
-            var executable = new CodexExecutableResolver().Resolve();
+            var executable = new CodexExecutableResolver().Resolve(configuration.CodexExecutable);
             await using var appServer = await CodexAppServerClient.StartAsync(
                 executable,
                 loggerFactory.CreateLogger<CodexAppServerClient>(),
@@ -198,11 +203,10 @@ public static class Program
             var history = new CodexHistoryAdapter(appServer);
             var uiDriver = new SystemWindowsCodexUiDriver(loggerFactory.CreateLogger<SystemWindowsCodexUiDriver>());
             var desktop = new CodexDesktopAdapter(uiDriver);
-            var relayUrl = Environment.GetEnvironmentVariable("CODEX_COMPANION_RELAY_URL")
-                ?? "ws://127.0.0.1:8080/ws/bridge";
+            var relayUrl = configuration.RelayUrl!;
             var relay = new BridgeRelayClient(
                 new Uri(relayUrl),
-                new BridgeCredentialStore(Environment.GetEnvironmentVariable("CODEX_COMPANION_CREDENTIAL_PATH")),
+                new BridgeCredentialStore(configuration.CredentialPath),
                 history,
                 desktop,
                 loggerFactory.CreateLogger<BridgeRelayClient>());
@@ -217,9 +221,10 @@ public static class Program
 
     private static async Task<int> RunWithHistoryAsync(
         Func<ICodexHistoryAdapter, Task> action,
+        BridgeConfiguration configuration,
         ILoggerFactory loggerFactory)
     {
-        var executable = new CodexExecutableResolver().Resolve();
+        var executable = new CodexExecutableResolver().Resolve(configuration.CodexExecutable);
         await using var client = await CodexAppServerClient.StartAsync(
             executable,
             loggerFactory.CreateLogger<CodexAppServerClient>());
@@ -231,6 +236,142 @@ public static class Program
     private static LogLevel ParseLogLevel(string? value)
         => Enum.TryParse<LogLevel>(value, true, out var level) ? level : LogLevel.Warning;
 
+    private static int RunSetup(BridgeConfiguration configuration)
+    {
+        Console.WriteLine($"配置文件：{configuration.FilePath}");
+        var relay = Prompt("Relay 地址", configuration.RelayUrl);
+        if (!BridgeConfiguration.IsValidRelayUri(relay, out _))
+        {
+            throw new ArgumentException("Relay 地址必须是 ws:// 或 wss:// 开头的完整 URL。");
+        }
+
+        var executable = Prompt("Codex CLI 路径（可留空自动探测）", configuration.CodexExecutable);
+        if (!string.IsNullOrWhiteSpace(executable) && !File.Exists(executable))
+        {
+            throw new FileNotFoundException("指定的 Codex CLI 文件不存在。", executable);
+        }
+
+        var credential = Prompt("凭据文件路径（可留空使用默认路径）", configuration.CredentialPath);
+        configuration.RelayUrl = relay.Trim();
+        configuration.CodexExecutable = string.IsNullOrWhiteSpace(executable) ? null : Path.GetFullPath(executable.Trim());
+        configuration.CredentialPath = string.IsNullOrWhiteSpace(credential) ? null : Path.GetFullPath(credential.Trim());
+        configuration.Save();
+        Console.WriteLine("配置已保存。首次运行 Bridge 后，终端会显示配对码。");
+        return 0;
+    }
+
+    private static string Prompt(string label, string? current)
+    {
+        var suffix = string.IsNullOrWhiteSpace(current) ? string.Empty : $" [{current}]";
+        Console.Write($"{label}{suffix}: ");
+        var value = Console.ReadLine();
+        return string.IsNullOrWhiteSpace(value) ? current ?? string.Empty : value.Trim();
+    }
+
+    private static async Task<int> RunDoctorAsync(BridgeConfiguration configuration, ILoggerFactory loggerFactory)
+    {
+        var failed = false;
+        void Report(string name, bool ok, string message, bool warning = false)
+        {
+            var status = ok ? "PASS" : warning ? "WARN" : "FAIL";
+            Console.WriteLine($"[{status}] {name}: {message}");
+            failed |= !ok && !warning;
+        }
+
+        var configurationExists = File.Exists(configuration.FilePath);
+        Report("配置文件", configurationExists,
+            configurationExists ? configuration.FilePath : "未找到，将使用环境变量或默认值。",
+            warning: !configurationExists);
+        Report("Relay 地址", BridgeConfiguration.IsValidRelayUri(configuration.RelayUrl ?? string.Empty, out var relayUri), configuration.RelayUrl ?? "未配置");
+        if (relayUri is not null && relayUri.Scheme.Equals("ws", StringComparison.OrdinalIgnoreCase))
+        {
+            Report("传输安全", false, "当前使用明文 ws://，个人测试可用，长期运行建议改为 wss://。", warning: true);
+        }
+
+        string? executable = null;
+        try
+        {
+            executable = new CodexExecutableResolver().Resolve(configuration.CodexExecutable);
+            Report("Codex CLI", true, executable);
+        }
+        catch (Exception exception)
+        {
+            Report("Codex CLI", false, exception.Message);
+        }
+
+        if (executable is not null)
+        {
+            try
+            {
+                var version = await ReadProcessOutputAsync(executable, "--version");
+                Report("Codex 版本", true, version.Trim());
+            }
+            catch (Exception exception)
+            {
+                Report("Codex 版本", false, exception.Message);
+            }
+
+            try
+            {
+                await using var appServer = await CodexAppServerClient.StartAsync(
+                    executable, loggerFactory.CreateLogger<CodexAppServerClient>(),
+                    new CancellationTokenSource(TimeSpan.FromSeconds(15)).Token);
+                Report("Codex app-server", true, "初始化成功");
+            }
+            catch (Exception exception)
+            {
+                Report("Codex app-server", false, exception.Message);
+            }
+        }
+
+        var credentialPath = configuration.CredentialPath ?? Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "CodexCompanion", "bridge-credential.json");
+        Report("Bridge 凭据", File.Exists(credentialPath), credentialPath, warning: true);
+        var desktopRunning = Process.GetProcessesByName("Codex").Length > 0;
+        Report("Codex Desktop", desktopRunning,
+            desktopRunning ? "已发现 Codex 进程。" : "未发现 Codex 进程，请确认 Desktop 已打开并登录。",
+            warning: true);
+
+        if (relayUri is not null)
+        {
+            try
+            {
+                using var socket = new ClientWebSocket();
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+                await socket.ConnectAsync(relayUri, timeout.Token);
+                await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "doctor", CancellationToken.None);
+                Report("Relay 网络/WSS", true, "WebSocket 握手成功");
+            }
+            catch (Exception exception)
+            {
+                Report("Relay 网络/WSS", false, exception.Message);
+            }
+        }
+
+        return failed ? 1 : 0;
+    }
+
+    private static async Task<string> ReadProcessOutputAsync(string executable, string argument)
+    {
+        using var process = Process.Start(new ProcessStartInfo
+        {
+            FileName = executable,
+            Arguments = argument,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        }) ?? throw new InvalidOperationException("无法启动 Codex CLI。");
+        var output = await process.StandardOutput.ReadToEndAsync();
+        await process.WaitForExitAsync();
+        if (process.ExitCode != 0)
+        {
+            throw new InvalidOperationException((await process.StandardError.ReadToEndAsync()).Trim());
+        }
+        return output;
+    }
+
     private static void PrintHelp()
     {
         Console.WriteLine("""
@@ -240,6 +381,8 @@ public static class Program
               thread <thread-id>
               inspect-ui [--output <path>]
               status
+              setup
+              doctor
               send <thread-id> <message> [--attach <path>]...
               stop <thread-id>
               run
@@ -249,6 +392,7 @@ public static class Program
               CODEX_COMPANION_LOG_LEVEL       Debug / Information / Warning / Error
               CODEX_COMPANION_RELAY_URL       Relay Bridge WebSocket URL
               CODEX_COMPANION_CREDENTIAL_PATH Bridge 凭据文件路径（可选）
+              CODEX_COMPANION_CONFIG_PATH     Bridge 配置文件路径（可选）
             """);
     }
 }

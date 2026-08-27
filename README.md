@@ -11,7 +11,11 @@ Codex Companion 是一个连接 Windows Codex Desktop 的个人自托管伴侣�
 
 ## 快速开始
 
-完整步骤见 [开发文档](docs/development.md)。先打开并登录 Codex Desktop。
+普通用户请先阅读 [快速部署](docs/quickstart.md)；源码开发请阅读 [开发文档](docs/development.md)。先打开并登录 Codex Desktop。
+
+### 源码开发快速开始
+
+下面的命令只适用于贡献者或需要从源码运行项目的开发者。普通用户请使用上面的快速部署文档。
 
 ```powershell
 docker compose up -d postgres
@@ -57,6 +61,7 @@ Android Debug 构建前，复制 `apps/web/.env.android-debug.example` 为 `apps
 - [安全边界](docs/security.md)
 - [本机 Codex 真实探测](docs/codex-research.md)
 - [公网部署与验收](docs/deployment.md)
+- [快速部署（IP / HTTPS 两种模式）](docs/quickstart.md)
 - [UIA tree](docs/codex-ui-tree.txt)
 
 ## 产品架构

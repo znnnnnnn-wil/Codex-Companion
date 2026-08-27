@@ -1,0 +1,24 @@
+name: Release Bridge
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  bridge:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish Bridge
+        shell: pwsh
+        run: ./scripts/publish-bridge.ps1 -Runtime win-x64 -Version '${{ github.ref_name }}'
+      - name: Upload Bridge package
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            .artifacts/CodexCompanion-Bridge-win-x64-${{ github.ref_name }}.zip
+            .artifacts/CodexCompanion-Bridge-win-x64-${{ github.ref_name }}.zip.sha256

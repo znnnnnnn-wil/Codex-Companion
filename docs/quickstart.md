@@ -1,0 +1,126 @@
+# 快速部署
+
+Codex Companion 有两种部署方式。个人首次体验建议使用 IP 快速模式；长期使用建议使用域名 HTTPS 模式。
+
+## 前置条件
+
+两种模式都需要：
+
+- 一台 Windows 10/11 电脑
+- 已安装并登录 Codex Desktop
+- 已安装 Codex CLI（Bridge 需要独立的 `codex.exe`，不能直接使用 MSIX 包内的受保护文件）
+- 一台可以被 Windows 电脑主动访问的 Linux VPS
+- VPS 已安装 Docker Engine 和 Docker Compose v2.24+
+
+服务器端不需要安装 Go、Node.js、.NET 或 JDK。它们只用于从源码开发和构建。
+
+## 模式 A：公网 IP 快速模式
+
+此模式不需要域名，适合个人测试。连接使用 HTTP/WS，不建议公开或长期使用。
+
+在 VPS 执行：
+
+```bash
+git clone https://github.com/znnnnnnn-wil/Codex-Companion.git /opt/codex-companion
+cd /opt/codex-companion
+cp .env.example .env
+```
+
+编辑 `.env`，至少设置：
+
+```env
+POSTGRES_PASSWORD=生成一个随机长密码
+ALLOWED_ORIGINS=你的VPS公网IP
+```
+
+启动服务：
+
+```bash
+docker compose up -d --build
+docker compose ps
+curl http://你的VPS公网IP/healthz
+```
+
+在 Windows 上安装 Bridge：
+
+1. 从 GitHub Releases 下载 `CodexCompanion-Bridge-win-x64-*.zip` 并解压。
+2. 在解压目录打开 PowerShell，执行 `Set-ExecutionPolicy -Scope Process Bypass`。
+3. 执行 `./install-bridge.ps1`，按提示填写 `ws://你的VPS公网IP/ws/bridge`。
+4. 首次安装脚本会在当前窗口运行 Bridge 并显示配对码。
+5. 在手机打开 `http://你的VPS公网IP`，输入配对码；完成后回到 PowerShell 按 Enter，安装脚本会创建登录时自动启动的任务。
+
+如果仓库还没有可用的 Release，开发者可以在源码目录执行 `./scripts/publish-bridge.ps1 -Version dev` 生成同样的 ZIP 包。
+
+VPS 防火墙只需要放行 TCP 80。PostgreSQL 和 Relay 不直接暴露公网端口。
+
+## 模式 B：域名 HTTPS 模式
+
+此模式适合长期运行。需要一个解析到 VPS 的域名，并确保 TCP 80/443 可以从公网访问。Caddy 会自动申请和续期证书，并代理 WebSocket。
+
+在 VPS 执行：
+
+```bash
+cd /opt/codex-companion
+cp .env.example .env
+```
+
+编辑 `.env`：
+
+```env
+POSTGRES_PASSWORD=生成一个随机长密码
+PUBLIC_HOST=companion.example.com
+ALLOWED_ORIGINS=companion.example.com,localhost
+```
+
+启动 HTTPS 版本：
+
+```bash
+docker compose -f compose.yml -f deploy/docker-compose.https.yml up -d --build
+docker compose ps
+curl https://companion.example.com/healthz
+```
+
+Windows Bridge 使用：
+
+```powershell
+CodexCompanion.Bridge.exe setup
+# Relay 地址填写：wss://companion.example.com/ws/bridge
+```
+
+手机访问 `https://companion.example.com`。生产环境不要把 `wss://` 改回 `ws://`。
+
+## 更新与日志
+
+IP 快速模式更新：
+
+```bash
+git -C /opt/codex-companion pull --ff-only
+cd /opt/codex-companion
+docker compose up -d --build
+docker compose logs -f relay
+```
+
+HTTPS 模式把启动命令替换为：
+
+```bash
+cd /opt/codex-companion
+docker compose -f compose.yml -f deploy/docker-compose.https.yml up -d --build
+```
+
+更新前先备份 PostgreSQL 数据卷。不要删除 `codex-companion-postgres`，否则会丢失设备配对信息。
+
+## 常见诊断
+
+Windows 上执行：
+
+```powershell
+CodexCompanion.Bridge.exe doctor
+```
+
+服务器上执行：
+
+```bash
+docker compose ps
+docker compose logs --tail=100 relay
+docker compose logs --tail=100 web
+```

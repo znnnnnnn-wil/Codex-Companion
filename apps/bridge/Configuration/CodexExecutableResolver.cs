@@ -4,9 +4,9 @@ namespace CodexCompanion.Bridge.Configuration;
 
 public sealed class CodexExecutableResolver
 {
-    public string Resolve()
+    public string Resolve(string? configured = null)
     {
-        var configured = Environment.GetEnvironmentVariable("CODEX_EXECUTABLE");
+        configured ??= Environment.GetEnvironmentVariable("CODEX_EXECUTABLE");
         if (!string.IsNullOrWhiteSpace(configured) && File.Exists(configured))
         {
             return Path.GetFullPath(configured);

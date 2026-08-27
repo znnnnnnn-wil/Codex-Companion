@@ -89,6 +89,7 @@ dotnet run -- send <thread-id> "hello"
 cd services/relay; go test ./...
 cd apps/bridge; dotnet test
 cd apps/web; npm test; npm run build
+```
 
 ## Capacitor 验证
 
@@ -99,7 +100,6 @@ npm run lint
 npm run build
 npx cap sync android
 android\gradlew.bat -p android assembleDebug
-```
 ```
 
 `scripts/e2e-mobile.mjs` 是不含假数据的协议级手机模拟器，需要实际 Relay、Bridge、配对码和真实 thread id。

@@ -1,0 +1,26 @@
+services:
+  web:
+    # Docker Compose v2.24+ supports !reset for removing the HTTP-only mapping.
+    ports: !reset []
+
+  caddy:
+    image: caddy:2.9-alpine
+    restart: unless-stopped
+    environment:
+      PUBLIC_HOST: ${PUBLIC_HOST:?PUBLIC_HOST is required, e.g. companion.example.com}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - codex-companion-caddy-data:/data
+      - codex-companion-caddy-config:/config
+    depends_on:
+      web:
+        condition: service_healthy
+    networks:
+      - backend
+
+volumes:
+  codex-companion-caddy-data:
+  codex-companion-caddy-config:
