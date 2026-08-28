@@ -1,10 +1,29 @@
 # Codex Companion
 
-> 让手机成为电脑上 Codex Desktop 的安全协作入口。
+> 在手机上继续电脑里的真实 Codex Desktop 对话。
 
-Codex Companion 是一个面向个人使用的自托管桥接方案：**Codex 仍然运行在你的 Windows 电脑上，手机只负责连接和交互**。在国内使用手机端 Codex 时，常见问题是登录和网络配置复杂、手机与电脑上的上下文割裂，还经常需要在手机上配置 VPN。这个项目把手机浏览器、一个公网 Relay 和 Windows Bridge 连起来，让你在手机上继续电脑端的真实 Codex thread，不用远程桌面，也不用把 Windows 电脑暴露到公网。
+[![Latest Release](https://img.shields.io/github/v/release/znnnnnnn-wil/Codex-Companion?display_name=tag&sort=semver)](https://github.com/znnnnnnn-wil/Codex-Companion/releases) [![License](https://img.shields.io/github/license/znnnnnnn-wil/Codex-Companion)](LICENSE)
 
-只要 Windows 电脑和手机都能访问你的 VPS，手机端就可以直接打开一个网页完成配对和聊天；Bridge 通过出站 WebSocket 连接 Relay，电脑不需要公网 IP、端口映射或 DDNS。长期使用可以启用 HTTPS/WSS；临时体验也可以用公网 IP 快速模式。
+Codex Companion 把手机浏览器变成 Codex Desktop 的轻量控制面板：**Codex 和本地代码继续运行在 Windows 电脑上，手机只负责查看和发送消息**。你可以在手机上浏览真实 thread、创建会话、发送指令并接收流式更新，不需要远程桌面，也不需要把 Windows 电脑暴露到公网。
+
+它适合希望在离开电脑后继续 Codex 工作流的个人开发者。Windows Bridge 通过出站 WebSocket 连接你自己的 VPS Relay；手机和电脑只要都能访问 VPS，就能完成配对和聊天。项目支持公网 IP 快速体验，也支持域名 HTTPS/WSS 长期运行。
+
+## 为什么使用它
+
+- **上下文不断线**：手机看到的是电脑 Codex Desktop 的真实 thread，不会产生另一份孤立聊天记录。
+- **不依赖远程桌面**：没有屏幕共享、通用键鼠或 Shell，权限边界更小，手机端也更轻量。
+- **少改网络配置**：Bridge 主动连接 Relay，不需要 Windows 公网 IP、端口转发或 DDNS。
+- **自托管且可审计**：Relay 只负责认证和路由，配对凭据受保护，完整安全边界见[安全文档](docs/security.md)。
+
+## 立即开始
+
+最短路径是：在 Linux VPS 启动 Relay，在 Windows 下载 Bridge 完成配对，然后用手机浏览器打开 Relay 地址。
+
+- [公网 IP 快速模式](docs/quickstart.md#模式-a公网-ip-快速模式)：无需域名，适合首次体验。
+- [域名 HTTPS 模式](docs/quickstart.md#模式-b域名-https-模式)：适合长期运行。
+- [下载最新 Bridge](https://github.com/znnnnnnn-wil/Codex-Companion/releases/latest)：提供 Windows 安装器和 ZIP 包。
+
+完整前置条件和命令见[快速部署文档](docs/quickstart.md)。
 
 ## 它真正解决的问题
 
