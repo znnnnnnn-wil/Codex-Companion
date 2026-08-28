@@ -98,7 +98,21 @@ Bridge 会显示一次性配对码。手机浏览器打开：
 http://你的VPS公网IP
 ```
 
-输入配对码即可完成连接。安装后 Bridge 默认保持停止，由你决定何时启动；控制命令和故障诊断见 [快速部署](docs/quickstart.md)。
+输入配对码即可完成连接。配对完成后回到 Windows PowerShell，安装器会结束临时配对进程；**此时还需要手动启动 Bridge**：
+
+```powershell
+$bridgeControl = "$env:LOCALAPPDATA\CodexCompanion\Bridge\bridge-control.ps1"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File $bridgeControl -Action Start
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File $bridgeControl -Action Status
+```
+
+确认状态输出中的 `Running` 为 `True` 后，重新打开或刷新手机浏览器即可连接。日后暂时不用时可以停止：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File $bridgeControl -Action Stop
+```
+
+安装后 Bridge 默认保持停止，由你决定何时启动；控制命令、登录自启动和故障诊断见 [快速部署](docs/quickstart.md)。
 
 ### 长期使用：域名 HTTPS 模式
 
@@ -116,7 +130,7 @@ ALLOWED_ORIGINS=companion.example.com,localhost
 docker compose -f compose.yml -f deploy/docker-compose.https.yml up -d --build
 ```
 
-Windows Bridge 使用 `wss://companion.example.com/ws/bridge`，手机访问 `https://companion.example.com`。Caddy 会自动申请和续期证书。完整的 IP、HTTPS、预构建镜像和更新流程见 [快速部署](docs/quickstart.md) 与 [公网部署与验收](docs/deployment.md)。
+Windows Bridge 使用 `wss://companion.example.com/ws/bridge` 完成 `setup` 和首次配对；配对完成后，在 PowerShell 执行上面的 `bridge-control.ps1 -Action Start` 启动后台 Bridge，再用手机访问 `https://companion.example.com`。Caddy 会自动申请和续期证书。完整的 IP、HTTPS、预构建镜像和更新流程见 [快速部署](docs/quickstart.md) 与 [公网部署与验收](docs/deployment.md)。
 
 ## Bridge 常用命令
 
