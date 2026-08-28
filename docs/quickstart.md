@@ -57,19 +57,41 @@ bash scripts/install-server.sh --host 你的VPS公网IP
 4. 首次安装脚本会在当前窗口运行 Bridge 并显示配对码。
 5. 在手机打开 `http://你的VPS公网IP`，输入配对码；完成后回到 PowerShell 按 Enter。安装完成后 Bridge 默认保持停止，由你手动启动。
 
-安装脚本会注册一个“按需运行”的后台任务，但不会默认加入 Windows 登录启动。日常控制命令如下（在任意 PowerShell 窗口执行）：
+安装脚本会注册一个“按需运行”的后台任务，但不会默认加入 Windows 登录启动。下面的命令都可以在任意 PowerShell 窗口执行。
+
+先设置控制脚本路径（当前 PowerShell 窗口后续命令会使用这个变量）：
 
 ```powershell
 $bridgeControl = "$env:LOCALAPPDATA\CodexCompanion\Bridge\bridge-control.ps1"
+```
+
+启动 Bridge（后台运行，不显示黑窗口）：
+
+```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File $bridgeControl -Action Start
+```
+
+停止 Bridge：
+
+```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File $bridgeControl -Action Stop
+```
+
+查看 Bridge 当前状态：
+
+```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File $bridgeControl -Action Status
 ```
 
-需要开机自动启动时，再主动启用；不需要时可随时关闭：
+需要开机自动启动时，主动启用：
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File $bridgeControl -Action EnableAutostart
+```
+
+关闭开机自动启动（不会卸载 Bridge，仍然可以手动启动）：
+
+```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File $bridgeControl -Action DisableAutostart
 ```
 
@@ -77,20 +99,30 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File $bridgeControl -Action D
 
 Bridge 只会在本机没有配对凭据时生成配对码。已经配对过的 Bridge 再次启动时会直接使用原凭据连接，因此不会每次启动都显示新配对码；后台启动也不会把配对码显示在当前窗口。
 
-需要获取新的配对码时，先停止后台 Bridge，并删除本机旧凭据。默认凭据路径如下：
+需要获取新的配对码时，请按下面四步执行。默认凭据路径如下：
+
+第一步，设置路径变量：
 
 ```powershell
 $bridgeControl = "$env:LOCALAPPDATA\CodexCompanion\Bridge\bridge-control.ps1"
 $credentialPath = "$env:LOCALAPPDATA\CodexCompanion\bridge-credential.json"
+```
 
+第二步，停止后台 Bridge：
+
+```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File $bridgeControl -Action Stop
+```
 
+第三步，备份并删除旧凭据：
+
+```powershell
 # 建议先备份旧凭据；如果不需要备份，也可以直接执行下一行 Remove-Item。
 Copy-Item $credentialPath "$credentialPath.backup" -ErrorAction SilentlyContinue
 Remove-Item $credentialPath -Force -ErrorAction SilentlyContinue
 ```
 
-然后以前台方式运行 Bridge，配对码会显示在当前 PowerShell 窗口：
+第四步，前台运行 Bridge，配对码会显示在当前 PowerShell 窗口：
 
 ```powershell
 & "$env:LOCALAPPDATA\CodexCompanion\Bridge\CodexCompanion.Bridge.exe" run
@@ -103,7 +135,7 @@ Codex Companion 配对码：XXXXXXXX
 手机配对地址：http://你的服务器地址/?pair=XXXXXXXX
 ```
 
-配对完成后，按 `Ctrl+C` 结束前台进程；以后可重新使用上面的 `Start` 命令让 Bridge 在后台运行。删除凭据会把 Bridge 视为新设备，原有设备凭据不会自动迁移；如果你的配置文件中设置了自定义 `credentialPath`，请删除自定义路径下的凭据文件。
+配对完成后，按 `Ctrl+C` 结束前台进程；然后执行上面的“启动 Bridge”命令让它回到后台运行。删除凭据会把 Bridge 视为新设备，原有设备凭据不会自动迁移；如果你的配置文件中设置了自定义 `credentialPath`，请删除自定义路径下的凭据文件。
 
 GUI 安装器会在开始菜单创建“启动 Bridge”“停止 Bridge”“Bridge 状态”“Bridge 配置”和“Bridge 诊断”快捷方式；“登录 Windows 后自动启动”和“安装完成后启动”默认不勾选。
 
