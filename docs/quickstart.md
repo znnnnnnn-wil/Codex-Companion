@@ -73,6 +73,38 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File $bridgeControl -Action E
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File $bridgeControl -Action DisableAutostart
 ```
 
+### 获取或重新生成配对码
+
+Bridge 只会在本机没有配对凭据时生成配对码。已经配对过的 Bridge 再次启动时会直接使用原凭据连接，因此不会每次启动都显示新配对码；后台启动也不会把配对码显示在当前窗口。
+
+需要获取新的配对码时，先停止后台 Bridge，并删除本机旧凭据。默认凭据路径如下：
+
+```powershell
+$bridgeControl = "$env:LOCALAPPDATA\CodexCompanion\Bridge\bridge-control.ps1"
+$credentialPath = "$env:LOCALAPPDATA\CodexCompanion\bridge-credential.json"
+
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File $bridgeControl -Action Stop
+
+# 建议先备份旧凭据；如果不需要备份，也可以直接执行下一行 Remove-Item。
+Copy-Item $credentialPath "$credentialPath.backup" -ErrorAction SilentlyContinue
+Remove-Item $credentialPath -Force -ErrorAction SilentlyContinue
+```
+
+然后以前台方式运行 Bridge，配对码会显示在当前 PowerShell 窗口：
+
+```powershell
+& "$env:LOCALAPPDATA\CodexCompanion\Bridge\CodexCompanion.Bridge.exe" run
+```
+
+看到类似下面的输出后，在手机打开配对地址，或输入 8 位配对码：
+
+```text
+Codex Companion 配对码：XXXXXXXX
+手机配对地址：http://你的服务器地址/?pair=XXXXXXXX
+```
+
+配对完成后，按 `Ctrl+C` 结束前台进程；以后可重新使用上面的 `Start` 命令让 Bridge 在后台运行。删除凭据会把 Bridge 视为新设备，原有设备凭据不会自动迁移；如果你的配置文件中设置了自定义 `credentialPath`，请删除自定义路径下的凭据文件。
+
 GUI 安装器会在开始菜单创建“启动 Bridge”“停止 Bridge”“Bridge 状态”“Bridge 配置”和“Bridge 诊断”快捷方式；“登录 Windows 后自动启动”和“安装完成后启动”默认不勾选。
 
 Bridge 发布包中的安装脚本使用带 BOM 的 UTF-8 编码，同时支持 Windows PowerShell 5.1 和 PowerShell 7。`v0.1.1` 的 ZIP 安装脚本缺少 BOM，在 Windows PowerShell 5.1 中可能报告 `TerminatorExpectedAtEndOfString`。遇到此错误时请升级到修复后的版本；升级前也可以在解压目录直接完成配置和配对：
