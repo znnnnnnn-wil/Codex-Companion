@@ -23,7 +23,7 @@ export default defineConfig(({ mode }) => {
         manifest: {
           name: 'Codex Companion',
           short_name: 'Companion',
-          description: '在手机上继续操作电脑中的真实 Codex 会话',
+          description: 'Self-hosted mobile access to your real Windows Codex Desktop threads.',
           theme_color: '#0f766e',
           background_color: '#f4f7f6',
           display: 'standalone',

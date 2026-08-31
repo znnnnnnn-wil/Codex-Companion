@@ -1,131 +1,95 @@
 # Codex Companion
 
+English | [简体中文](./README.zh-CN.md)
+
 **Remote Codex, not your computer.**
 
 Continue your real Windows Codex Desktop threads from any phone browser.
 
-Self-hosted · Outbound-only · No phone VPN · Minimal permissions
+`Self-hosted` · `Outbound-only` · `No phone VPN` · `Minimal permissions`
 
 [![Latest Release](https://img.shields.io/github/v/release/znnnnnnn-wil/Codex-Companion?display_name=tag&sort=semver)](https://github.com/znnnnnnn-wil/Codex-Companion/releases) [![License](https://img.shields.io/github/license/znnnnnnn-wil/Codex-Companion)](LICENSE)
 
-[![Codex Companion：Windows Codex Desktop 与手机浏览器继续同一条真实 thread](docs/assets/codex-companion-demo.png)](https://znnnnnnn-wil.github.io/Codex-Companion/demo/)
+[![Codex Companion demo showing Windows Codex Desktop and a phone browser continuing the same thread](docs/assets/codex-companion-demo.png)](https://znnnnnnn-wil.github.io/Codex-Companion/demo/)
 
-[打开 15 秒自动播放 Demo](https://znnnnnnn-wil.github.io/Codex-Companion/demo/) · 无需后端或登录
+[▶ Try the 15-second interactive demo](https://znnnnnnn-wil.github.io/Codex-Companion/demo/)
 
-Codex Companion 把手机浏览器变成 Codex Desktop 的轻量控制面板：**Codex 和本地代码继续运行在 Windows 电脑上，手机只负责查看和发送消息**。你可以在手机上浏览真实 thread、创建会话、发送指令并接收流式更新，不需要远程桌面，也不需要把 Windows 电脑暴露到公网。
+Codex Companion connects a mobile browser to the Codex Desktop instance already running on your Windows PC. The phone can continue the same real Codex thread through your self-hosted Relay, while the Windows Bridge keeps the computer-side connection outbound. It does not expose a remote desktop, arbitrary shell, or general-purpose file API.
 
-它适合希望在离开电脑后继续 Codex 工作流的个人开发者。Windows Bridge 通过出站 WebSocket 连接你自己的 VPS Relay；手机和电脑只要都能访问 VPS，就能完成配对和聊天。项目支持公网 IP 快速体验，也支持域名 HTTPS/WSS 长期运行。
+## Why Codex Companion?
 
-## 为什么使用它
+### Continue the real Codex thread
 
-- **上下文不断线**：手机看到的是电脑 Codex Desktop 的真实 thread，不会产生另一份孤立聊天记录。
-- **不依赖远程桌面**：没有屏幕共享、通用键鼠或 Shell，权限边界更小，手机端也更轻量。
-- **少改网络配置**：Bridge 主动连接 Relay，不需要 Windows 公网 IP、端口转发或 DDNS。
-- **自托管且可审计**：Relay 只负责认证和路由，配对凭据受保护，完整安全边界见[安全文档](docs/security.md)。
+The phone reads and continues the thread that already exists in Codex on your Windows PC. Codex history remains the source of truth; the Web client does not create a separate conversation database.
 
-## 立即开始
+### Remote Codex, not the whole computer
 
-最短路径是：在 Linux VPS 启动 Relay，在 Windows 下载 Bridge 完成配对，然后用手机浏览器打开 Relay 地址。
+The protocol is limited to supported Codex operations. It does not provide the phone with the Windows desktop, arbitrary shell commands, arbitrary file access, or generic keyboard and mouse control.
 
-- [公网 IP 快速模式](docs/quickstart.md#模式-a公网-ip-快速模式)：无需域名，适合首次体验。
-- [域名 HTTPS 模式](docs/quickstart.md#模式-b域名-https-模式)：适合长期运行。
-- [下载最新 Bridge](https://github.com/znnnnnnn-wil/Codex-Companion/releases/latest)：提供 Windows 安装器和 ZIP 包。
+### Outbound-only Windows connection
 
-完整前置条件和命令见[快速部署文档](docs/quickstart.md)。
+The Windows Bridge initiates the WebSocket connection to the Relay. Your Windows PC does not need a public IP, inbound port forwarding, or DDNS. Production deployments should use HTTPS and outbound WSS; the quick evaluation mode uses HTTP and WS.
 
-## 它真正解决的问题
+### Self-hosted
 
-### 手机端配置麻烦
+You choose where the Relay and Web client run. The Relay authenticates devices and routes supported messages. With PostgreSQL enabled, it stores device, pairing, and credential-hash metadata—not complete prompts, responses, source code, or attachment bodies.
 
-手机不需要安装完整开发环境，也不需要把 Codex Desktop 搬到手机上。部署一次服务后，用手机浏览器打开地址，输入 Windows Bridge 显示的一次性配对码即可开始使用；Android APK 是可选封装，不是必需组件。
+## Is this for me?
 
-### 手机和电脑上下文不一致
+Codex Companion may be a good fit if you:
 
-手机端看到和发送的都是电脑 Codex Desktop 的真实 thread。已有项目、历史消息、生成图片和任务状态都以 Codex thread 为准，不会再产生一份孤立的“手机聊天记录”。你可以在电脑上继续操作，再回到手机查看增量更新。
+- use Codex Desktop on Windows;
+- want to check or continue a running Codex thread from your phone;
+- prefer a normal mobile browser;
+- want a self-hosted Relay;
+- do not want to expose your full desktop or shell; or
+- do not want to configure a VPN on the phone.
 
-### 不想在手机上长期依赖 VPN 或远程桌面
+It may not be the best fit if you need full remote desktop access, arbitrary shell or filesystem access from your phone, a non-Windows Codex host, or if the official Codex remote experience already fully satisfies your workflow.
 
-手机访问的是你自己部署的 Web/Relay 地址，而不是 Windows 桌面。Bridge 只向 Relay 发起出站连接，因此不需要开放电脑端口；手机也不需要运行 VPN 或远程桌面客户端。网络可达性取决于你选择的 VPS、域名和运营商网络，项目本身不会绕过网络限制。
+## Quick Start
 
-### 希望远程协作，但不想给出整台电脑权限
+### Prerequisites
 
-它不是远程桌面。协议只开放 thread 列表、读取、创建、发送消息、读取已验证媒体和停止 Codex 等有限操作，没有 shell、任意文件读写、通用鼠标键盘或屏幕控制能力。
+- Windows 10/11 with Codex Desktop installed and signed in.
+- A separately installed [Codex CLI](https://github.com/openai/codex). The Bridge cannot start the application-protected executable inside the Desktop MSIX package.
+- A Linux VPS reachable by the Windows PC and phone, with Git, curl, Docker Engine, and Docker Compose v2.24+.
 
-## 你会得到什么
+### 1. Deploy the Relay
 
-- **连续的 Codex 工作流**：按项目浏览真实会话，在手机发起新 thread、发送文本和主动选择的附件，并接收电脑端的流式更新。
-- **电脑端保持原样**：Codex Desktop 和本地代码仍在 Windows 上运行，手机只是一个轻量控制面板。
-- **出站连接，少改网络**：Windows Bridge 主动连接 Relay，不需要电脑公网 IP、路由器端口转发或 DDNS。
-- **浏览器优先**：部署完成后直接用手机浏览器访问；同一份 Web 构建产物也可以打包为 Android APK。
-- **可诊断、可控制**：Bridge 提供 `setup`、`doctor`、启动/停止和可选登录自启动，默认不会在 Windows 登录后自动运行。
-- **以安全为边界**：配对码一次性且 10 分钟过期，凭据只保存哈希或由系统安全存储保护，Relay 不持久化 prompt、回复或源代码。
-
-## 工作方式
-
-```text
-手机浏览器 / Android（React Web UI）
-              │ HTTPS/WSS
-              ▼
-       你的 VPS：Relay + Web
-              ▲
-              │ Windows 主动出站 WSS
-              │
-       Windows Bridge
-              │
-              ▼
-        Codex Desktop
-```
-
-Codex thread 是唯一聊天记录真相源：Bridge 通过 Codex app-server 读取 thread、历史和状态，并在经过窗口与 thread 校验后使用 Codex Desktop 的 UI Automation 发送消息。Relay 只负责认证、路由和在线状态；PostgreSQL（HTTPS 模式）只保存设备、配对状态和凭据哈希。Web 端仅保留当前页面状态和待确认消息。
-
-## 安全边界（重要）
-
-- Web 到 Bridge 的消息使用显式 allowlist，仅包含 `thread.list.request`、`thread.create.request`、`thread.read.request`、`media.read.request`、`message.send` 和 `codex.stop`。
-- 新建 thread 的 `cwd` 必须匹配 Bridge 从真实 thread 读取到的项目路径；不会借此打开任意本机目录。
-- Bridge 会校验 Codex Desktop 进程路径和顶层窗口，所有 UI selector 都限制在已验证窗口的后代节点内。
-- 配对凭据由 CSPRNG 生成 256-bit token；Relay/PostgreSQL 只保存 SHA-256 hash，Windows 端使用 DPAPI，Android 端使用 Keystore 保护的安全存储。
-- Relay 不保存完整 prompt、回复、源码或附件内容；离线命令不会把 prompt 排队写入数据库。
-- 生产环境应使用 HTTPS/WSS、限制 `ALLOWED_ORIGINS`、为 PostgreSQL 使用独立随机密码，并只公开反向代理端口。
-
-完整说明见 [安全边界](docs/security.md)。
-
-## 快速开始
-
-### 前置条件
-
-- 一台 Windows 10/11 电脑，已安装并登录 Codex Desktop。
-- 已单独安装 Codex CLI（Bridge 需要可执行的 `codex.exe`，不能直接使用 MSIX 包内受保护文件）。
-- 一台 Windows 可以主动访问的 Linux VPS，已安装 Docker Engine 和 Docker Compose v2.24+。
-- 手机可以访问 VPS 的公网地址。手机和电脑不需要彼此直连。
-
-### 个人首次体验：公网 IP 快速模式
-
-此模式不需要域名，适合验证功能或个人临时使用；连接为 HTTP/WS，不建议公开或长期运行。
-
-在 VPS 执行：
+For a first evaluation using a public IP:
 
 ```bash
 git clone https://github.com/znnnnnnn-wil/Codex-Companion.git /opt/codex-companion
 cd /opt/codex-companion
-cp .env.example .env
-sed -i 's/^ALLOWED_ORIGINS=.*/ALLOWED_ORIGINS=你的VPS公网IP/' .env
-docker compose -f deploy/docker-compose.quick.yml up -d --build
-curl http://你的VPS公网IP/healthz
+bash scripts/install-server.sh --host YOUR_VPS_IP
 ```
 
-然后在 Windows 下载 GitHub Releases 中的 Bridge ZIP，运行安装脚本并填写：
+This quick mode uses HTTP/WS and in-memory pairing data. Use it for evaluation, not an exposed long-running production deployment.
+
+### 2. Set up the Windows Bridge
+
+Download and extract the latest Windows Bridge ZIP from [Releases](https://github.com/znnnnnnn-wil/Codex-Companion/releases/latest), then run this inside the extracted directory:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install-bridge.ps1
+```
+
+When prompted, enter:
 
 ```text
-ws://你的VPS公网IP/ws/bridge
+ws://YOUR_VPS_IP/ws/bridge
 ```
 
-Bridge 会显示一次性配对码。手机浏览器打开：
+The installer starts a temporary foreground Bridge and displays an eight-character pairing code.
 
-```text
-http://你的VPS公网IP
-```
+### 3. Pair your phone
 
-输入配对码即可完成连接。配对完成后回到 Windows PowerShell，安装器会结束临时配对进程；**此时还需要手动启动 Bridge**：
+Open `http://YOUR_VPS_IP` in the phone browser and enter the pairing code. The code expires after ten minutes and can only be claimed once.
+
+### 4. Start the Bridge
+
+The installer leaves the background Bridge stopped by default. Start it explicitly:
 
 ```powershell
 $bridgeControl = "$env:LOCALAPPDATA\CodexCompanion\Bridge\bridge-control.ps1"
@@ -133,94 +97,103 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File $bridgeControl -Action S
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File $bridgeControl -Action Status
 ```
 
-确认状态输出中的 `Running` 为 `True` 后，重新打开或刷新手机浏览器即可连接。日后暂时不用时可以停止：
+Refresh the phone browser after `Running` becomes `True`.
 
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File $bridgeControl -Action Stop
+For a long-running deployment with a domain, TLS, WSS, and persistent PostgreSQL pairing data, follow the [complete deployment guide](docs/quickstart.md).
+
+## How it works
+
+```text
+Phone Browser / optional Android app
+                │
+             HTTPS/WSS
+                │
+        Self-hosted Relay + Web
+                │
+       outbound WebSocket / WSS
+                │
+          Windows Bridge
+                │
+          Codex Desktop
 ```
 
-安装后 Bridge 默认保持停止，由你决定何时启动；控制命令、登录自启动和故障诊断见 [快速部署](docs/quickstart.md)。
+1. The Windows Bridge initiates the outbound connection to the Relay.
+2. The phone browser connects to the Relay and requests supported Codex operations.
+3. The Relay authenticates and routes allowlisted messages; it does not run Codex or read the project source tree.
+4. The Bridge reads real threads through `codex app-server` and sends messages through validated Codex Desktop UI Automation.
+5. The real Codex thread remains the conversation source of truth. The Bridge polls active history and streams confirmed changes back to the phone.
 
-### 长期使用：域名 HTTPS 模式
+See [Architecture](docs/architecture.md) and the [WebSocket protocol](docs/protocol.md) for implementation details.
 
-准备一个解析到 VPS 的域名，放行 TCP 80/443，然后在 `.env` 中设置：
+## How is it different?
 
-```env
-POSTGRES_PASSWORD=生成一个随机长密码
-PUBLIC_HOST=companion.example.com
-ALLOWED_ORIGINS=companion.example.com,localhost
-```
+| | Codex Companion | Remote Desktop | VPN + local service |
+| --- | --- | --- | --- |
+| Primary scope | Supported Codex operations | Full desktop session | Whatever the service exposes |
+| Continue a real Codex thread | Yes | Indirectly, through the desktop | Depends |
+| Full desktop access required | No | Yes | No |
+| Phone VPN required | No | Depends on the product and setup | Yes |
+| Public inbound port on Windows | No | Depends on the setup | No |
+| Arbitrary shell or file access | No | Desktop-level access | Depends |
+| Self-hosted Relay | Yes | Depends | Not applicable |
 
-启动：
+Codex Companion is not intended to replace OpenAI's official remote experience. It is for users who specifically want a self-hosted, browser-first, outbound-relay architecture with a deliberately narrow permission boundary.
 
-```bash
-docker compose -f compose.yml -f deploy/docker-compose.https.yml up -d --build
-```
+## Security model
 
-Windows Bridge 使用 `wss://companion.example.com/ws/bridge` 完成 `setup` 和首次配对；配对完成后，在 PowerShell 执行上面的 `bridge-control.ps1 -Action Start` 启动后台 Bridge，再用手机访问 `https://companion.example.com`。Caddy 会自动申请和续期证书。完整的 IP、HTTPS、预构建镜像和更新流程见 [快速部署](docs/quickstart.md) 与 [公网部署与验收](docs/deployment.md)。
+### What Codex Companion allows
 
-## Bridge 常用命令
+The Web-to-Bridge allowlist supports:
 
-```powershell
-# 首次配置 Relay 地址、Codex CLI 路径并完成配对
-CodexCompanion.Bridge.exe setup
+- listing and reading real Codex threads;
+- creating a thread only within a project path already observed from real threads;
+- sending text and user-selected attachments;
+- reading validated generated images and available image attachments from a real thread; and
+- stopping work in a uniquely identified Codex Desktop thread.
 
-# 诊断环境；--json 便于自动化收集，不输出凭据
-CodexCompanion.Bridge.exe doctor
-CodexCompanion.Bridge.exe doctor --json
+### What it intentionally does not expose
 
-# 运行 Bridge
-CodexCompanion.Bridge.exe run
-```
+- arbitrary shell execution;
+- arbitrary filesystem reads or writes;
+- a full remote desktop or screen stream;
+- generic keyboard and mouse control; or
+- unrestricted UI Automation outside a validated Codex Desktop window.
 
-安装器也会创建启动、停止、状态、配置和诊断快捷方式。登录自启动需要显式启用，可随时关闭。
+### Connection and data model
 
-## 当前能力
+The Bridge connects outward to the Relay. The Relay keeps request correlation and message routing in memory. PostgreSQL, when configured, stores devices, pairing state, and SHA-256 credential hashes. Offline prompts are not queued, and complete prompts, responses, source code, and attachment bodies are not persisted by the Relay.
 
-- .NET 10 Windows Bridge：真实 `thread/list`、`thread/read`、`thread/start`，项目路径和标题消歧，Desktop 语义化发送，真实历史确认，增量 polling 和 Relay 自动重连。
-- Go Relay：WebSocket 路由、pairing、在线状态、request correlation、PostgreSQL Store 和消息类型 allowlist。
-- React/Vite Web 客户端：移动优先聊天、按项目新建会话、侧栏抽屉、Markdown/GFM/code block、自动滚动、pending→confirmed 对账、PC/Codex 状态、附件和错误重连提示。
-- 可选 Android：由 Capacitor 打包同一份 Web 构建产物；Android 凭据使用 Keystore 保护的安全存储。
-- 测试与验收：Relay 路由/认证/配对/断线/关联、Bridge parser/UI abstraction/send timeout、Web store/reconnect，以及真实端到端脚本。
+### Pairing and credentials
 
-## 非目标
+Pairing uses an eight-character, single-use code with a ten-minute lifetime. Bridge and Web credentials are independently generated 256-bit tokens; the Relay stores only their hashes. Windows protects the Bridge credential with DPAPI. The optional Android app uses Keystore-backed secure storage; a normal browser uses browser local storage.
 
-项目不提供远程桌面、终端、任意文件操作、通用鼠标键盘控制、Claude/Gemini、多 Agent、Git UI 或企业级权限系统。它专注于一件事：**把电脑上真实的 Codex 工作流安全地带到手机浏览器**。
+These controls reduce the exposed capability surface; they do not remove the need to secure your VPS, TLS configuration, database, browser, or Windows account. Read the complete [Security model](docs/security.md) before exposing a deployment to the internet.
 
-## 开发者
+## Current capabilities
 
-源码开发、测试、Android Debug 构建和架构细节见：
+- **Windows Bridge (.NET 10):** real `thread/list`, `thread/read`, and `thread/start`; validated Desktop message sending; history confirmation; status polling; stop control; attachment staging; Relay reconnect.
+- **Relay (Go):** pairing, credential authentication, WebSocket routing, request correlation, connection status, explicit message allowlists, in-memory or PostgreSQL metadata storage.
+- **Web client (React/Vite):** mobile-first thread list and chat, new threads for known project paths, Markdown/GFM, streaming updates, pending-to-confirmed reconciliation, attachments, generated images, stop control, and reconnect state.
+- **Optional Android app (Capacitor):** the same Web client in a native wrapper with Keystore-backed credential storage.
 
-- [开发文档](docs/development.md)
-- [架构与真相源](docs/architecture.md)
-- [WebSocket 协议](docs/protocol.md)
-- [本机 Codex 真实探测](docs/codex-research.md)
+Codex Companion currently targets Windows Codex Desktop. It does not provide provider switching, Git UI, multi-agent orchestration, enterprise authorization, or a standalone cloud AI backend. The model and account remain those used by the real Codex Desktop thread.
 
-以下服务请分别在独立终端运行：
+## Web and Android
 
-```powershell
-docker compose up -d postgres
-```
+The mobile browser is the recommended client and requires no app installation. The Android package is optional and is built from the same Web source. Android release builds require an HTTPS/WSS deployment and explicit Relay origin configuration.
 
-```powershell
-cd services/relay
-$env:DATABASE_URL='postgres://codex_companion:codex_companion_dev@127.0.0.1:5432/codex_companion?sslmode=disable'
-go run ./cmd/server
-```
+See [Development](docs/development.md) for Android build commands and constraints.
 
-```powershell
-cd apps/bridge
-$env:CODEX_COMPANION_RELAY_URL='ws://127.0.0.1:8080/ws/bridge'
-dotnet run -- run
-```
+## Development
 
-```powershell
-cd apps/web
-npm install
-npm run dev
-```
+The repository contains four main surfaces:
 
-常用检查：
+- `apps/bridge` — Windows Bridge and Codex Desktop integration;
+- `services/relay` — Relay, pairing, routing, and storage;
+- `apps/web` — browser client, optional Android wrapper, and product Demo;
+- `deploy` — Docker Compose, Nginx, and Caddy deployment configuration.
+
+Common checks:
 
 ```powershell
 cd apps/web
@@ -229,6 +202,49 @@ npm run lint
 npm run build
 ```
 
-## 许可证
+```powershell
+cd services/relay
+go test ./...
+```
 
-本项目采用 [MIT License](LICENSE) 开源。
+```powershell
+dotnet test CodexCompanion.slnx
+```
+
+See the [development guide](docs/development.md) for local service startup, toolchain requirements, Android builds, and diagnostic commands.
+
+## FAQ
+
+### Does Codex Companion run its own AI model?
+
+No. It does not configure a separate backend model or require an OpenAI API key in the Relay. Work continues in the real Codex Desktop thread on the Windows PC, using that Codex account and thread configuration.
+
+### Does the phone need a VPN?
+
+No. The phone and Windows PC only need network access to the Relay you deployed. Production use should expose the Relay through HTTPS/WSS.
+
+### Does the Relay store my conversations or source code?
+
+The current Relay implementation does not persist complete prompts, responses, source code, or attachment bodies. It does process routed WebSocket messages in memory. With PostgreSQL enabled, it stores device, pairing, and credential-hash metadata.
+
+### Can I use it as Remote Desktop or SSH?
+
+No. Those capabilities are intentionally outside the protocol.
+
+### Is Android required?
+
+No. A normal phone browser is the recommended entry point. Android is an optional wrapper around the same Web client.
+
+## Documentation
+
+- [Quick deployment](docs/quickstart.md)
+- [Public deployment and acceptance notes](docs/deployment.md)
+- [Security model](docs/security.md)
+- [Architecture and source of truth](docs/architecture.md)
+- [WebSocket protocol](docs/protocol.md)
+- [Development](docs/development.md)
+- [Codex Desktop integration research](docs/codex-research.md)
+
+## License
+
+Codex Companion is available under the [MIT License](LICENSE).
