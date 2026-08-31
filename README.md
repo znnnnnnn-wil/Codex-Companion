@@ -1,8 +1,16 @@
 # Codex Companion
 
-> 在手机上继续电脑里的真实 Codex Desktop 对话。
+**Remote Codex, not your computer.**
+
+Continue your real Windows Codex Desktop threads from any phone browser.
+
+Self-hosted · Outbound-only · No phone VPN · Minimal permissions
 
 [![Latest Release](https://img.shields.io/github/v/release/znnnnnnn-wil/Codex-Companion?display_name=tag&sort=semver)](https://github.com/znnnnnnn-wil/Codex-Companion/releases) [![License](https://img.shields.io/github/license/znnnnnnn-wil/Codex-Companion)](LICENSE)
+
+[![Codex Companion：Windows Codex Desktop 与手机浏览器继续同一条真实 thread](docs/assets/codex-companion-demo.png)](https://znnnnnnn-wil.github.io/Codex-Companion/demo/)
+
+[打开 15 秒自动播放 Demo](https://znnnnnnn-wil.github.io/Codex-Companion/demo/) · 无需后端或登录
 
 Codex Companion 把手机浏览器变成 Codex Desktop 的轻量控制面板：**Codex 和本地代码继续运行在 Windows 电脑上，手机只负责查看和发送消息**。你可以在手机上浏览真实 thread、创建会话、发送指令并接收流式更新，不需要远程桌面，也不需要把 Windows 电脑暴露到公网。
 
