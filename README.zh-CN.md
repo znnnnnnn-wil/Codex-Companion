@@ -12,7 +12,7 @@
 
 [![Codex Companion 演示：Windows Codex Desktop 与手机浏览器继续同一条 thread](docs/assets/codex-companion-demo.png)](https://znnnnnnn-wil.github.io/Codex-Companion/demo/)
 
-[▶ 打开 15 秒交互 Demo](https://znnnnnnn-wil.github.io/Codex-Companion/demo/)
+[▶ 查看 15 秒交互演示](https://znnnnnnn-wil.github.io/Codex-Companion/demo/)
 
 Codex Companion 把手机浏览器连接到 Windows 电脑上已经运行的 Codex Desktop。手机通过你自己部署的 Relay 继续同一条真实 Codex thread，Windows Bridge 始终主动向外建立连接。它不提供远程桌面、任意 Shell 或通用文件 API。
 
