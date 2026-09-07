@@ -10,9 +10,14 @@ permissions:
 
 jobs:
   bridge:
+    # New Bridge authentication confirmation requires the matching Relay release.
+    needs: images
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
       - name: Publish Bridge
         shell: pwsh
         run: ./scripts/publish-bridge.ps1 -Runtime win-x64 -Version '${{ github.ref_name }}'
@@ -30,6 +35,8 @@ jobs:
       - name: Upload Bridge package
         uses: softprops/action-gh-release@v2
         with:
+          body_path: docs/releases/${{ github.ref_name }}.md
+          fail_on_unmatched_files: true
           files: |
             .artifacts/CodexCompanion-Bridge-win-x64-${{ github.ref_name }}.zip
             .artifacts/CodexCompanion-Bridge-win-x64-${{ github.ref_name }}.zip.sha256

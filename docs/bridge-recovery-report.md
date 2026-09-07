@@ -2,6 +2,8 @@
 
 日期：2026-09-07。仓库：`znnnnnnn-wil/Codex-Companion`。修改已在本地实现并验证，未推送、发布或修改真实部署及现有用户凭据。
 
+发布前补充：上述“未推送”和本机验证限制是实现完成时的记录。修复随后已推送至 main；GitHub Actions 运行 34110831689 的 Bridge 与 Compose 两个作业全部通过，包含双 PowerShell、Go 竞态检测和真实 Docker Compose 服务健康检查。专用 PostgreSQL 配对集成测试及手机实机发送仍未验证。
+
 ## 1. 根因分析
 
 1. `BridgeRelayClient` 发送 `device.hello` 后不等待认证结果，立即发送状态、启动轮询；认证拒绝没有转化成明确的生命周期状态。
