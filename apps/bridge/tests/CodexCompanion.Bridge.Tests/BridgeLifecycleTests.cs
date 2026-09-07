@@ -292,10 +292,12 @@ public sealed class BridgeLifecycleTests : IDisposable
         if (scenario == "invalid") File.WriteAllText(Store.FilePath, "{");
         else if (scenario == "decrypt") File.WriteAllText(Store.FilePath, "{\"DeviceId\":\"d\",\"ProtectedCredential\":\"AQID\"}");
         else if (scenario != "missing") Store.Save(new("device", "private-secret"));
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         await using var server = new FakeRelay(async socket =>
         {
             if (scenario is not ("accepted" or "rejected")) return;
+            // doctor checks the local machine before opening the socket. Start
+            // this deadline after that work, and allow its full 8-second probe.
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
             var request = await FakeRelay.Read(socket, timeout.Token);
             Assert.Equal("device.auth.check", request.Type);
             await FakeRelay.Send(socket, TransportEnvelope.Create("device.auth.result", request.RequestId, null, null,
@@ -313,11 +315,12 @@ public sealed class BridgeLifecycleTests : IDisposable
         finally { Console.SetOut(previous); }
         using var report = JsonDocument.Parse(output.ToString());
         var checks = report.RootElement.GetProperty("checks").EnumerateArray().ToArray();
-        Assert.Contains(checks, check => check.GetProperty("message").GetString()!.Contains(expected));
+        Assert.True(checks.Any(check => check.GetProperty("message").GetString()!.Contains(expected)), output.ToString());
         Assert.Contains(checks, check => check.GetProperty("name").GetString() == "Relay 网络" && check.GetProperty("ok").GetBoolean());
         Assert.DoesNotContain("private-secret", output.ToString());
         Assert.DoesNotContain("INTERNAL_ERROR", output.ToString());
         if (scenario == "accepted") Assert.Contains(checks, check => check.GetProperty("name").GetString() == "Relay authentication" && check.GetProperty("ok").GetBoolean());
+        await server.Completion;
     }
 
     private static void WithEnvironment(string config, string? credential, Action test)
@@ -384,6 +387,11 @@ public sealed class BridgeLifecycleTests : IDisposable
         }
         public static async Task Send(WebSocket socket, TransportEnvelope envelope, CancellationToken token)
             => await socket.SendAsync(JsonSerializer.SerializeToUtf8Bytes(envelope, Json), WebSocketMessageType.Text, true, token);
-        public async ValueTask DisposeAsync() { _listener.Stop(); await Completion; }
+        public async ValueTask DisposeAsync()
+        {
+            _listener.Stop();
+            try { await Completion; }
+            catch (OperationCanceledException) { /* Do not mask a prior diagnostic assertion during cleanup. */ }
+        }
     }
 }
