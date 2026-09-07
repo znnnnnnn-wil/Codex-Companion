@@ -14,8 +14,33 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Validate quick Compose file
-        run: docker compose -f deploy/docker-compose.quick.yml config
-        env:
-          ALLOWED_ORIGINS: localhost
+        run: |
+          printf 'ALLOWED_ORIGINS=localhost\n' > .env
+          docker compose --env-file .env -f deploy/docker-compose.quick.yml config --quiet
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/relay/go.mod
+          cache-dependency-path: services/relay/go.sum
+      - name: Test Relay
+        working-directory: services/relay
+        run: go test -race ./...
       - name: Run server smoke test
         run: bash scripts/smoke-compose.sh
+      - name: Test server installer command construction
+        run: bash scripts/test-install-server.sh
+
+  bridge:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Test Bridge
+        run: dotnet test apps/bridge/tests/CodexCompanion.Bridge.Tests
+      - name: Test control script in Windows PowerShell 5.1
+        shell: powershell
+        run: ./scripts/test-bridge-control.ps1
+      - name: Test control script in PowerShell 7
+        shell: pwsh
+        run: ./scripts/test-bridge-control.ps1

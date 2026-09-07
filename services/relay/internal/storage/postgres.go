@@ -110,3 +110,9 @@ func (s *PostgresStore) Close() error {
 	s.pool.Close()
 	return nil
 }
+
+func (s *PostgresStore) IsPaired(ctx context.Context, deviceID string) (bool, error) {
+	var paired bool
+	err := s.pool.QueryRow(ctx, `select exists(select 1 from devices where id = $1 and paired_at is not null)`, deviceID).Scan(&paired)
+	return paired, err
+}

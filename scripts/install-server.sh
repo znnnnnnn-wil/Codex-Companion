@@ -81,11 +81,11 @@ else
   fi
 fi
 
-compose_args=(-f compose.yml)
+compose_args=(--env-file "$PWD/.env" -f compose.yml)
 if [[ "$MODE" == "https" ]]; then
   compose_args+=(-f deploy/docker-compose.https.yml)
 else
-  compose_args=(-f deploy/docker-compose.quick.yml)
+  compose_args=(--env-file "$PWD/.env" -f deploy/docker-compose.quick.yml)
 fi
 if [[ "$USE_IMAGES" == "true" ]]; then
   compose_args+=(-f deploy/docker-compose.images.yml)
@@ -109,5 +109,7 @@ for _ in {1..20}; do
   fi
   sleep 3
 done
-echo "Services started but health check failed. Run: docker compose ${compose_args[*]} logs --tail=100" >&2
+printf 'Services started but health check failed. From %q run: docker compose ' "$PWD" >&2
+printf '%q ' "${compose_args[@]}" >&2
+printf 'logs --tail=100\n' >&2
 exit 1

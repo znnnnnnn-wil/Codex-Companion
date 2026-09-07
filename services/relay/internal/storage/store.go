@@ -16,5 +16,6 @@ type Store interface {
 	CreatePairing(ctx context.Context, deviceID, deviceName, code string, expiresAt time.Time, bridgeTokenHash []byte) error
 	ClaimPairing(ctx context.Context, code string, webTokenHash []byte, now time.Time) (string, error)
 	Authenticate(ctx context.Context, deviceID, role string, tokenHash []byte) (bool, error)
+	IsPaired(ctx context.Context, deviceID string) (bool, error)
 	Close() error
 }

@@ -36,6 +36,20 @@ Relay 返回 `pairing.created`，payload 含 `deviceId`、8 位 `code`、一次�
 
 手机首次配对的第一帧为 `pairing.claim`；成功返回 `pairing.claimed` 和一次性 `webCredential`，同时 Bridge 收到 `pairing.completed`。
 
+## Bridge 认证确认与诊断扩展
+
+Bridge 可在 `device.hello.payload` 中增加 `"acknowledge":true`。新 Relay 验证成功后返回同一 `requestId` 的 `device.authenticated`，payload 为 `{"authenticated":true,"paired":true|false}`。`paired=false` 表示设备身份有效，但手机尚未完成配对。未请求确认的旧客户端行为不变。
+
+doctor 使用独立的短连接，首帧为 `device.auth.check`，payload 仅包含 `deviceId` 和 `credential`。Relay 返回同一 `requestId` 的 `device.auth.result`：
+
+```json
+{"type":"device.auth.result","requestId":"uuid","payload":{"authenticated":true,"paired":true,"code":"OK"}}
+```
+
+失败时 `authenticated=false`，`code=UNAUTHORIZED` 表示明确拒绝凭据，`AUTH_UNAVAILABLE` 表示存储/认证服务暂不可用。此分支只允许 Bridge 端点，在设备注册到 Hub 之前结束；不会创建长期会话、替换现有 Bridge、改变配对信息或发送上下线通知。响应不包含凭据。
+
+旧 Relay 对未知探测可能返回通用 `error/UNAUTHORIZED`，不能把这个响应当成凭据失效；Bridge 会报告探测不支持并要求先升级 Relay。只有实际 `device.hello` 的认证拒绝或 `device.auth.result` 的明确拒绝才能证明旧凭据不能使用。传输中断、超时和认证服务错误不能触发自动重置。
+
 ## 消息类型
 
 | type | 方向 | terminal | 用途 |

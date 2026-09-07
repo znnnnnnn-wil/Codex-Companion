@@ -9,6 +9,7 @@ using CodexCompanion.Bridge.Codex.Models;
 using CodexCompanion.Bridge.Configuration;
 using CodexCompanion.Bridge.Pairing;
 using CodexCompanion.Bridge.Relay;
+using CodexCompanion.Bridge.Runtime;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -25,7 +26,13 @@ public static class Program
     public static async Task<int> Main(string[] args)
     {
         Console.OutputEncoding = Encoding.UTF8;
-        var configuration = BridgeConfiguration.Load();
+        BridgeConfiguration configuration;
+        try { configuration = BridgeConfiguration.Load(args.FirstOrDefault() is "run" or "pair" or "status" or "doctor" or "setup" ? args : null); }
+        catch (Exception exception) when (exception is JsonException or IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            Console.Error.WriteLine(JsonSerializer.Serialize(new { type = "error", code = "CONFIG_INVALID", message = "无法加载 Bridge 配置，请检查配置路径、JSON 格式及启动参数。" }, JsonOptions));
+            return 2;
+        }
         using var loggerFactory = LoggerFactory.Create(builder =>
         {
             builder.SetMinimumLevel(ParseLogLevel(configuration.LogLevel));
@@ -53,7 +60,8 @@ public static class Program
                 }, configuration, loggerFactory),
                 "thread" => await RunThreadAsync(args, configuration, loggerFactory),
                 "inspect-ui" => await RunInspectorAsync(args),
-                "status" => RunStatus(loggerFactory),
+                "status" => RunStatus(args, configuration, loggerFactory),
+                "pair" => await RunPairAsync(configuration),
                 "setup" => await RunSetupAsync(configuration, loggerFactory),
                 "doctor" => await RunDoctorAsync(args, configuration, loggerFactory),
                 "send" => await RunSendAsync(args, configuration, loggerFactory),
@@ -61,6 +69,16 @@ public static class Program
                 "run" => await RunBridgeAsync(configuration, loggerFactory),
                 _ => throw new ArgumentException($"未知命令：{args[0]}")
             };
+        }
+        catch (BridgeAlreadyRunningException exception)
+        {
+            Console.Error.WriteLine(JsonSerializer.Serialize(new { type = "error", code = "BRIDGE_ALREADY_RUNNING", message = exception.Message }, JsonOptions));
+            return 2;
+        }
+        catch (CredentialException exception)
+        {
+            Console.Error.WriteLine(JsonSerializer.Serialize(new { type = "error", code = exception.Code, message = exception.Message }, JsonOptions));
+            return 2;
         }
         catch (BridgeException exception)
         {
@@ -123,8 +141,20 @@ public static class Program
         return 0;
     }
 
-    private static int RunStatus(ILoggerFactory loggerFactory)
+    private static int RunStatus(string[] args, BridgeConfiguration configuration, ILoggerFactory loggerFactory)
     {
+        if (args.Skip(1).Contains("--pairing"))
+        {
+            var store = new BridgeCredentialStore(configuration.CredentialPath);
+            Console.WriteLine(JsonSerializer.Serialize(new { credentialExists = File.Exists(store.FilePath) }, JsonOptions));
+            return 0;
+        }
+        if (args.Skip(1).Contains("--runtime"))
+        {
+            Console.WriteLine(JsonSerializer.Serialize(BridgeRuntime.Read(new BridgeCredentialStore(configuration.CredentialPath).FilePath, configuration.RelayUrl), JsonOptions));
+            return 0;
+        }
+        // Preserve the existing Desktop status JSON for callers and integrations.
         var driver = new SystemWindowsCodexUiDriver(loggerFactory.CreateLogger<SystemWindowsCodexUiDriver>());
         var adapter = new CodexDesktopAdapter(driver);
         Console.WriteLine(JsonSerializer.Serialize(adapter.GetDesktopStatus(), JsonOptions));
@@ -187,6 +217,11 @@ public static class Program
 
     private static async Task<int> RunBridgeAsync(BridgeConfiguration configuration, ILoggerFactory loggerFactory)
     {
+        var store = new BridgeCredentialStore(configuration.CredentialPath);
+        using var runtime = new BridgeRuntime(store.FilePath, configuration.RelayUrl);
+        Console.WriteLine("Codex Companion Bridge 正在启动... 按 Ctrl+C 停止。");
+        var endpoint = new UriBuilder(configuration.RelayUrl!) { UserName = "", Password = "", Query = "", Fragment = "" }.Uri;
+        Console.WriteLine($"Relay: {endpoint}");
         using var cancellation = new CancellationTokenSource();
         ConsoleCancelEventHandler handler = (_, eventArgs) =>
         {
@@ -207,17 +242,66 @@ public static class Program
             var relayUrl = configuration.RelayUrl!;
             var relay = new BridgeRelayClient(
                 new Uri(relayUrl),
-                new BridgeCredentialStore(configuration.CredentialPath),
+                store,
                 history,
                 desktop,
-                loggerFactory.CreateLogger<BridgeRelayClient>());
+                loggerFactory.CreateLogger<BridgeRelayClient>(), runtime);
             await relay.RunAsync(cancellation.Token);
             return 0;
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { return 0; }
+        catch
+        {
+            runtime.Set("StartupFailed", error: "Bridge 启动失败，请运行 doctor 检查本机环境。");
+            throw;
         }
         finally
         {
             Console.CancelKeyPress -= handler;
         }
+    }
+
+    private static async Task<int> RunPairAsync(BridgeConfiguration configuration)
+    {
+        var store = new BridgeCredentialStore(configuration.CredentialPath);
+        // Acquire before touching credentials: another run/pair cannot race this reset.
+        using var runtime = new BridgeRuntime(store.FilePath, configuration.RelayUrl);
+        using var cancellation = new CancellationTokenSource();
+        ConsoleCancelEventHandler handler = (_, eventArgs) => { eventArgs.Cancel = true; cancellation.Cancel(); };
+        Console.CancelKeyPress += handler;
+        try
+        {
+            runtime.Set("Connecting", pairingRequired: true);
+            using var socket = new ClientWebSocket();
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation.Token);
+            timeout.CancelAfter(TimeSpan.FromSeconds(10));
+            var uri = new Uri(configuration.RelayUrl!);
+            // A network failure before connection does not even move the old file.
+            await socket.ConnectAsync(uri, timeout.Token);
+            var backup = store.BackupAndReset();
+            if (backup is not null) Console.WriteLine($"旧凭据已备份：{backup}；本次配对将创建设备的新身份。");
+            runtime.Set("PairingRequired", reachable: true, connected: true, pairingRequired: true);
+            await RelayHandshake.CreatePairingAsync(socket, uri, store, timeout.Token);
+            Console.WriteLine("请在手机完成配对。按 Ctrl+C 取消；配对完成后本命令自动退出。");
+            using var pairingTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation.Token);
+            pairingTimeout.CancelAfter(TimeSpan.FromMinutes(10));
+            while (true)
+            {
+                var response = await RelayHandshake.ReceiveAsync(socket, pairingTimeout.Token);
+                RelayHandshake.ThrowIfRejected(response);
+                if (response.Type == "pairing.completed") break;
+            }
+            Console.WriteLine("配对完成。请执行 bridge-control.ps1 -Action Start 启动后台 Bridge。");
+            return 0;
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { return 0; }
+        catch
+        {
+            runtime.Set("PairingRequired", pairingRequired: true, error: "配对未完成或已超时。凭据备份已保留，请重试 pair。");
+            Console.Error.WriteLine("配对未完成或已超时。请检查 Relay 后重试 pair；已有备份不会删除。");
+            return 1;
+        }
+        finally { Console.CancelKeyPress -= handler; }
     }
 
     private static async Task<int> RunWithHistoryAsync(
@@ -298,7 +382,7 @@ public static class Program
                 using var socket = new ClientWebSocket();
                 using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(8));
                 await socket.ConnectAsync(relayUri, timeout.Token);
-                await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "setup", CancellationToken.None);
+                await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "setup", timeout.Token);
                 Console.WriteLine("[PASS] Relay 网络/WSS：WebSocket 可达");
             }
             catch (Exception exception)
@@ -382,10 +466,18 @@ public static class Program
             }
         }
 
-        var credentialPath = configuration.CredentialPath ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "CodexCompanion", "bridge-credential.json");
-        Report("Bridge 凭据", File.Exists(credentialPath), credentialPath, warning: true);
+        var store = new BridgeCredentialStore(configuration.CredentialPath);
+        BridgeCredential? credential = null;
+        try
+        {
+            credential = store.Load();
+            Report("Bridge 凭据", credential is not null, credential is null
+                ? $"CREDENTIAL_MISSING：{store.FilePath}；请运行 pair。"
+                : $"凭据文件存在、格式有效且 DPAPI 解密成功：{store.FilePath}");
+        }
+        catch (CredentialException exception) { Report("Bridge 凭据", false, $"{exception.Code}：{exception.Message}"); }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        { Report("Bridge 凭据", false, $"CREDENTIAL_UNREADABLE：无法读取 {store.FilePath}，请检查文件权限。"); }
         var desktopRunning = Process.GetProcessesByName("Codex").Length > 0;
         Report("Codex Desktop", desktopRunning,
             desktopRunning ? "已发现 Codex 进程。" : "未发现 Codex 进程，请确认 Desktop 已打开并登录。",
@@ -393,17 +485,42 @@ public static class Program
 
         if (relayUri is not null)
         {
+            using var socket = new ClientWebSocket();
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+            var reachable = false;
             try
             {
-                using var socket = new ClientWebSocket();
-                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(8));
                 await socket.ConnectAsync(relayUri, timeout.Token);
-                await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "doctor", CancellationToken.None);
-                Report("Relay 网络/WSS", true, "WebSocket 握手成功");
+                reachable = true;
+                Report("Relay 网络", true, "WebSocket 可达（尚未验证身份）。");
             }
-            catch (Exception exception)
+            catch
             {
-                Report("Relay 网络/WSS", false, exception.Message);
+                Report("Relay 网络", false, "NETWORK_UNAVAILABLE：WebSocket 连接失败或超时；凭据已保留。");
+            }
+            if (reachable && credential is not null)
+            {
+                try
+                {
+                    var result = await RelayHandshake.ProbeAsync(socket, credential, timeout.Token);
+                    Report("Relay authentication", result.Authenticated, result.Code switch
+                    {
+                        "OK" when result.Authenticated => result.Paired ? "device authenticated；手机已配对。" : "device authenticated；尚未完成手机配对，请运行 pair 获取新配对码。",
+                        "UNAUTHORIZED" => "当前 credential 已失效或设备不存在。请停止 Bridge 后运行 CodexCompanion.Bridge.exe pair。",
+                        "AUTH_UNAVAILABLE" => "Relay 认证服务暂不可用；凭据已保留，请稍后重试。",
+                        _ => "无法确认认证：Relay 不支持此诊断或响应无效。请先升级 Relay；凭据已保留。"
+                    });
+                    if (result.Authenticated && !result.Paired)
+                        Report("手机配对", false, "PAIRING_REQUIRED：尚未完成配对，请运行 pair。");
+                }
+                catch
+                {
+                    Report("Relay authentication", false, "认证确认超时或连接中断；结果未知，凭据已保留。请检查网络及 Relay 版本。");
+                }
+            }
+            else
+            {
+                Report("Relay authentication", false, "未检查：需要可读凭据和可达的 Relay。");
             }
         }
 
@@ -455,7 +572,8 @@ public static class Program
               threads
               thread <thread-id>
               inspect-ui [--output <path>]
-              status
+              status [--runtime]            默认保留 Desktop 状态；--runtime 输出 Bridge JSON
+              pair                          备份当前实际凭据并重新配对（先停止 Bridge）
               setup
               doctor [--json]
               send <thread-id> <message> [--attach <path>]...

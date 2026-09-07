@@ -67,6 +67,14 @@ bash scripts/install-server.sh --host YOUR_VPS_IP
 
 This quick mode uses HTTP/WS and in-memory pairing data. Use it for evaluation, not an exposed long-running production deployment.
 
+Run Mode A maintenance commands from `/opt/codex-companion`, explicitly selecting the environment file and quick Compose file:
+
+```bash
+docker compose --env-file .env -f deploy/docker-compose.quick.yml up -d --build
+docker compose --env-file .env -f deploy/docker-compose.quick.yml ps
+docker compose --env-file .env -f deploy/docker-compose.quick.yml logs -f relay
+```
+
 ### 2. Set up the Windows Bridge
 
 Download and extract the latest Windows Bridge ZIP from [Releases](https://github.com/znnnnnnn-wil/Codex-Companion/releases/latest), then run this inside the extracted directory:
@@ -97,7 +105,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File $bridgeControl -Action S
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File $bridgeControl -Action Status
 ```
 
-Refresh the phone browser after `Running` becomes `True`.
+Refresh the phone browser after `Ready=True` (`Connected=True`, `Authenticated=True`, `PairingRequired=False`). `ProcessRunning` only means the process exists. Use `CodexCompanion.Bridge.exe status --runtime` for JSON runtime status and `doctor` for a separate credential authentication probe. If pairing is required, stop Bridge and run `CodexCompanion.Bridge.exe pair`; it backs up the effective credential path and displays a new code, URL, and QR code. Start Bridge again when pairing completes. Upgrade Relay before Bridge; older Relays cannot confirm authentication.
 
 For a long-running deployment with a domain, TLS, WSS, and persistent PostgreSQL pairing data, follow the [complete deployment guide](docs/quickstart.md).
 

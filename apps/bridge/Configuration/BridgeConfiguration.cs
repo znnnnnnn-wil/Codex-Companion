@@ -18,9 +18,16 @@ public sealed class BridgeConfiguration
     [JsonIgnore]
     public string FilePath { get; private set; } = DefaultPath();
 
-    public static BridgeConfiguration Load()
+    public static BridgeConfiguration Load(string[]? args = null)
     {
-        var path = Environment.GetEnvironmentVariable("CODEX_COMPANION_CONFIG_PATH");
+        string? Option(string name)
+        {
+            var index = Array.IndexOf(args ?? [], name);
+            if (index < 0) return null;
+            if (index + 1 >= args!.Length) throw new ArgumentException($"{name} requires a value.");
+            return args[index + 1];
+        }
+        var path = Option("--config") ?? Environment.GetEnvironmentVariable("CODEX_COMPANION_CONFIG_PATH");
         var configuration = new BridgeConfiguration
         {
             FilePath = string.IsNullOrWhiteSpace(path) ? DefaultPath() : Path.GetFullPath(path.Trim())
@@ -39,16 +46,18 @@ public sealed class BridgeConfiguration
             }
         }
 
-        configuration.RelayUrl = Environment.GetEnvironmentVariable("CODEX_COMPANION_RELAY_URL")
+        configuration.RelayUrl = Option("--relay-url") ?? Environment.GetEnvironmentVariable("CODEX_COMPANION_RELAY_URL")
                                  ?? configuration.RelayUrl
                                  ?? "ws://127.0.0.1:8080/ws/bridge";
-        configuration.CodexExecutable = Environment.GetEnvironmentVariable("CODEX_EXECUTABLE")
+        configuration.CodexExecutable = Option("--codex-executable") ?? Environment.GetEnvironmentVariable("CODEX_EXECUTABLE")
                                         ?? configuration.CodexExecutable;
-        configuration.CredentialPath = Environment.GetEnvironmentVariable("CODEX_COMPANION_CREDENTIAL_PATH")
+        configuration.CredentialPath = Option("--credential-path") ?? Environment.GetEnvironmentVariable("CODEX_COMPANION_CREDENTIAL_PATH")
                                        ?? configuration.CredentialPath;
-        configuration.LogLevel = Environment.GetEnvironmentVariable("CODEX_COMPANION_LOG_LEVEL")
+        configuration.LogLevel = Option("--log-level") ?? Environment.GetEnvironmentVariable("CODEX_COMPANION_LOG_LEVEL")
                                  ?? configuration.LogLevel
                                  ?? "Warning";
+        if (!string.IsNullOrWhiteSpace(configuration.CredentialPath))
+            configuration.CredentialPath = Path.GetFullPath(configuration.CredentialPath, Path.GetDirectoryName(configuration.FilePath)!);
         return configuration;
     }
 

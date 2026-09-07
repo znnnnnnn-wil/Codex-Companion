@@ -1,3 +1,5 @@
+# Run from the repository root: docker compose --env-file .env -f deploy/docker-compose.quick.yml up -d --build
+# Pairing metadata is in memory; a relay restart requires Bridge Stop -> pair -> Start.
 services:
   relay:
     build:

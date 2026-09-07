@@ -67,6 +67,14 @@ bash scripts/install-server.sh --host YOUR_VPS_IP
 
 这个快速模式使用 HTTP/WS 和内存配对数据，只适合验证功能，不建议作为暴露在公网的长期生产部署。
 
+模式 A 的维护命令从 `/opt/codex-companion` 执行，并明确指定环境文件和快速模式 Compose 文件：
+
+```bash
+docker compose --env-file .env -f deploy/docker-compose.quick.yml up -d --build
+docker compose --env-file .env -f deploy/docker-compose.quick.yml ps
+docker compose --env-file .env -f deploy/docker-compose.quick.yml logs -f relay
+```
+
 ### 2. 配置 Windows Bridge
 
 从 [Releases](https://github.com/znnnnnnn-wil/Codex-Companion/releases/latest) 下载并解压最新 Windows Bridge ZIP，然后在解压目录执行：
@@ -97,7 +105,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File $bridgeControl -Action S
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File $bridgeControl -Action Status
 ```
 
-确认 `Running` 为 `True` 后刷新手机浏览器。
+确认 `Ready=True`（`Connected=True`、`Authenticated=True`、`PairingRequired=False`）后刷新手机浏览器。`ProcessRunning` 只表示进程存在。`CodexCompanion.Bridge.exe status --runtime` 输出运行状态 JSON；`doctor` 单独验证凭据认证。需要重新配对时，先停止 Bridge，再执行 `CodexCompanion.Bridge.exe pair`，它会备份实际路径下的凭据并显示新的配对码、URL 和二维码；手机配对完成后重新启动 Bridge。升级时先更新 Relay，再更新 Bridge；旧 Relay 无法提供认证确认。
 
 长期运行时，请配置域名、TLS、WSS 和用于持久化配对数据的 PostgreSQL，具体见[完整部署文档](docs/quickstart.md#模式-b域名-https-模式)。
 

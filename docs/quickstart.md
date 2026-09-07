@@ -36,8 +36,10 @@ ALLOWED_ORIGINS=你的VPS公网IP
 启动服务：
 
 ```bash
-docker compose -f deploy/docker-compose.quick.yml up -d --build
-docker compose ps
+docker compose --env-file .env -f deploy/docker-compose.quick.yml up -d --build
+docker compose --env-file .env -f deploy/docker-compose.quick.yml ps
+docker compose --env-file .env -f deploy/docker-compose.quick.yml logs -f relay
+# 查看日志后按 Ctrl+C 返回，再检查健康接口：
 curl http://你的VPS公网IP/healthz
 ```
 
@@ -55,7 +57,7 @@ bash scripts/install-server.sh --host 你的VPS公网IP
 2. 在解压目录打开 PowerShell，执行 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./install-bridge.ps1`。也可以在 PowerShell 7 中执行 `pwsh -File ./install-bridge.ps1`。
 3. 按提示填写 `ws://你的VPS公网IP/ws/bridge`。
 4. 首次安装脚本会在当前窗口运行 Bridge 并显示配对码。
-5. 在手机打开 `http://你的VPS公网IP`，输入配对码；完成后回到 PowerShell 按 Enter。安装完成后 Bridge 默认保持停止，由你手动启动。
+5. 在手机打开 `http://你的VPS公网IP`，输入配对码；收到配对完成确认后命令自动退出。安装完成后 Bridge 默认保持停止，由你手动启动。
 
 安装脚本会注册一个“按需运行”的后台任务，但不会默认加入 Windows 登录启动。下面的命令都可以在任意 PowerShell 窗口执行。
 
@@ -95,47 +97,38 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File $bridgeControl -Action E
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File $bridgeControl -Action DisableAutostart
 ```
 
-### 获取或重新生成配对码
+### 运行状态与重新配对
 
-Bridge 只会在本机没有配对凭据时生成配对码。已经配对过的 Bridge 再次启动时会直接使用原凭据连接，因此不会每次启动都显示新配对码；后台启动也不会把配对码显示在当前窗口。
+`ProcessRunning=True` 仅表示进程存在。确认 `Connected=True`、`Authenticated=True`、`PairingRequired=False`、`Ready=True` 后再使用手机网页。`RelayReachable` 为空表示尚未确认网络，`Unavailable` 表示没有可信的最新运行状态。`Ready` 表示 Bridge 会话已认证并完成手机配对；Codex Desktop 是否已登录、能否发送消息仍需检查 Desktop/doctor。
 
-需要获取新的配对码时，请按下面四步执行。默认凭据路径如下：
+```powershell
+$bridge = "$env:LOCALAPPDATA\CodexCompanion\Bridge\CodexCompanion.Bridge.exe"
+& $bridge status --runtime
+& $bridge doctor
+```
 
-第一步，设置路径变量：
+`status --runtime` 输出机器可读 JSON；原来的 `status` 仍输出 Codex Desktop 状态。显式的配置环境变量覆盖会传入计划任务启动参数；自动启动会沿用最近注册/启动任务时的覆盖值，修改覆盖后请 Stop → Start。`Start` 最多等待约 15 秒确认运行状态，分别报告 Ready、需要配对、重连中或启动失败；临时网络失败不会杀死 Bridge。
+
+模式 A Relay 重启会丢失内存中的设备身份。此时旧凭据会被拒绝，Bridge 进入 `PairingRequired` 并保留原文件，不会无限提交失效凭据，也不会自动更换设备身份。需要重新配对时执行：
 
 ```powershell
 $bridgeControl = "$env:LOCALAPPDATA\CodexCompanion\Bridge\bridge-control.ps1"
-$credentialPath = "$env:LOCALAPPDATA\CodexCompanion\bridge-credential.json"
-```
-
-第二步，停止后台 Bridge：
-
-```powershell
+$bridge = "$env:LOCALAPPDATA\CodexCompanion\Bridge\CodexCompanion.Bridge.exe"
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File $bridgeControl -Action Stop
+& $bridge pair
 ```
 
-第三步，备份并删除旧凭据：
+`pair` 自动加载有效配置和 `CODEX_COMPANION_CREDENTIAL_PATH` 覆盖，定位实际凭据（相对路径以配置文件所在目录为基准）。它先取得独占锁并连接 Relay，然后将旧的 DPAPI 加密凭据移动为同目录的唯一 `.backup-*` 文件，再生成新的 8 位配对码、URL 和二维码。无需手工查找或删除 JSON；旧备份不会自动删除。连接失败前不会移动旧凭据。已有前台或后台 `run/pair` 时，会提示先停止。
+
+在手机打开配对 URL，或输入配对码；收到 Relay 的 `pairing.completed` 确认后，`pair` 自动退出。按 Ctrl+C 可以取消，过期或中断后可重试 `pair`。重新配对会创建新的设备身份，旧的手机凭据需要用新配对码替换。完成后启动后台 Bridge：
 
 ```powershell
-# 建议先备份旧凭据；如果不需要备份，也可以直接执行下一行 Remove-Item。
-Copy-Item $credentialPath "$credentialPath.backup" -ErrorAction SilentlyContinue
-Remove-Item $credentialPath -Force -ErrorAction SilentlyContinue
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File $bridgeControl -Action Start
 ```
 
-第四步，前台运行 Bridge，配对码会显示在当前 PowerShell 窗口：
+首次 `run` 没有凭据时也会显示配对码并等待手机配对；`run` 是长期前台进程，按 Ctrl+C 停止。后台首次启动时，控制脚本会提示需要配对，使用上述 `Stop` → `pair` → `Start` 完成恢复。
 
-```powershell
-& "$env:LOCALAPPDATA\CodexCompanion\Bridge\CodexCompanion.Bridge.exe" run
-```
-
-看到类似下面的输出后，在手机打开配对地址，或输入 8 位配对码：
-
-```text
-Codex Companion 配对码：XXXXXXXX
-手机配对地址：http://你的服务器地址/?pair=XXXXXXXX
-```
-
-配对完成后，按 `Ctrl+C` 结束前台进程；然后执行上面的“启动 Bridge”命令让它回到后台运行。删除凭据会把 Bridge 视为新设备，原有设备凭据不会自动迁移；如果你的配置文件中设置了自定义 `credentialPath`，请删除自定义路径下的凭据文件。
+升级时请先更新 Relay 再更新 Bridge。认证确认和无副作用探测是可选扩展，旧 Bridge/Web 仍可连接新 Relay。新 Bridge 遇到没有认证确认/探测能力的旧 Relay 时会报告认证未知并要求升级，绝不会把握手成功当成认证成功或据此删除凭据。
 
 GUI 安装器会在开始菜单创建“启动 Bridge”“停止 Bridge”“Bridge 状态”“Bridge 配置”和“Bridge 诊断”快捷方式；“登录 Windows 后自动启动”和“安装完成后启动”默认不勾选。
 
@@ -150,17 +143,11 @@ Bridge 发布包中的安装脚本使用带 BOM 的 UTF-8 编码，同时支持 
 
 VPS 防火墙只需要放行 TCP 80。PostgreSQL 和 Relay 不直接暴露公网端口。
 
-如果希望使用 GitHub Container Registry 的预构建镜像，可将启动命令替换为：
+快速模式可以使用 GitHub Container Registry 的预构建镜像（仍然不需要 PostgreSQL）：
 
 ```bash
-docker compose -f compose.yml -f deploy/docker-compose.images.yml up -d
-```
-
-快速模式也可以直接使用预构建镜像（仍然不需要 PostgreSQL）：
-
-```bash
-docker compose -f deploy/docker-compose.quick.yml -f deploy/docker-compose.images.yml pull
-docker compose -f deploy/docker-compose.quick.yml -f deploy/docker-compose.images.yml up -d
+docker compose --env-file .env -f deploy/docker-compose.quick.yml -f deploy/docker-compose.images.yml pull
+docker compose --env-file .env -f deploy/docker-compose.quick.yml -f deploy/docker-compose.images.yml up -d
 ```
 
 首次使用 GHCR 前，请在仓库的 **Packages** 页面将 `codex-companion-relay` 和
@@ -190,8 +177,8 @@ ALLOWED_ORIGINS=companion.example.com,localhost
 启动 HTTPS 版本：
 
 ```bash
-docker compose -f compose.yml -f deploy/docker-compose.https.yml up -d --build
-docker compose ps
+docker compose --env-file .env -f compose.yml -f deploy/docker-compose.https.yml up -d --build
+docker compose --env-file .env -f compose.yml -f deploy/docker-compose.https.yml ps
 curl https://companion.example.com/healthz
 ```
 
@@ -204,8 +191,8 @@ bash scripts/install-server.sh --domain companion.example.com
 使用 GHCR 预构建镜像时，增加镜像覆盖文件并先拉取：
 
 ```bash
-docker compose -f compose.yml -f deploy/docker-compose.images.yml -f deploy/docker-compose.https.yml pull
-docker compose -f compose.yml -f deploy/docker-compose.images.yml -f deploy/docker-compose.https.yml up -d
+docker compose --env-file .env -f compose.yml -f deploy/docker-compose.images.yml -f deploy/docker-compose.https.yml pull
+docker compose --env-file .env -f compose.yml -f deploy/docker-compose.images.yml -f deploy/docker-compose.https.yml up -d
 ```
 
 Windows Bridge 使用：
@@ -224,15 +211,15 @@ IP 快速模式更新：
 ```bash
 git -C /opt/codex-companion pull --ff-only
 cd /opt/codex-companion
-docker compose up -d --build
-docker compose logs -f relay
+docker compose --env-file .env -f deploy/docker-compose.quick.yml up -d --build
+docker compose --env-file .env -f deploy/docker-compose.quick.yml logs -f relay
 ```
 
 HTTPS 模式把启动命令替换为：
 
 ```bash
 cd /opt/codex-companion
-docker compose -f compose.yml -f deploy/docker-compose.https.yml up -d --build
+docker compose --env-file .env -f compose.yml -f deploy/docker-compose.https.yml up -d --build
 ```
 
 使用预构建镜像时，脚本命令为：
@@ -252,14 +239,16 @@ CodexCompanion.Bridge.exe doctor
 CodexCompanion.Bridge.exe doctor --json
 ```
 
-`--json` 适合安装器、自动化脚本和提交诊断信息；输出不会包含 Bridge 凭据内容。
+`--json` 适合安装器、自动化脚本和提交诊断信息；输出不会包含 Bridge 凭据内容。doctor 分别检查凭据不存在、JSON/Base64 损坏、DPAPI 解密失败、网络不可达、Relay 拒绝凭据以及认证成功。探测不会注册 Bridge 会话或影响现有连接；存储故障、超时及旧 Relay 不支持探测都不会被归类为失效凭据。
 
-服务器上执行：
+运行状态保存在实际凭据旁的 `.runtime.json`，由 `run/pair` 独占 `.runtime.json.lock`。状态每 3 秒更新，读取时验证 PID、进程启动时间和 15 秒时效；进程已退出或 PID 被复用时不会返回旧的已认证状态。状态文件不包含 token、credential 或配对码。
+
+服务器上在 `/opt/codex-companion` 目录执行（模式 A）：
 
 ```bash
-docker compose ps
-docker compose logs --tail=100 relay
-docker compose logs --tail=100 web
+docker compose --env-file .env -f deploy/docker-compose.quick.yml ps
+docker compose --env-file .env -f deploy/docker-compose.quick.yml logs --tail=100 relay
+docker compose --env-file .env -f deploy/docker-compose.quick.yml logs --tail=100 web
 ```
 
 ## 干净环境验收
@@ -272,3 +261,5 @@ docker compose logs --tail=100 web
 4. 在手机打开网页，扫描 Bridge 终端二维码（或手动输入 8 位配对码），确认自动进入项目列表。
 5. 手动执行 Bridge 启动命令，确认手机可连接；如果启用了自启动，再重启 Windows 验证它自动启动并能在 Relay 重启后自动重连。
 6. 快速模式重启 Relay 后应重新配对；HTTPS 模式重启 Relay 后应保留 PostgreSQL 中的设备凭据。
+
+HTTPS 模式的诊断命令应使用 `docker compose --env-file .env -f compose.yml -f deploy/docker-compose.https.yml ps` 和相同文件组合的 `logs`。所有 Compose 命令均从仓库根目录执行，显式加载 `.env`；不要省略模式对应的 `-f` 参数。

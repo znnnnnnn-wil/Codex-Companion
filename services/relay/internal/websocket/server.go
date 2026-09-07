@@ -28,9 +28,12 @@ const (
 )
 
 type helloPayload struct {
-	DeviceID   string `json:"deviceId"`
-	Credential string `json:"credential"`
+	DeviceID    string `json:"deviceId"`
+	Credential  string `json:"credential"`
+	Acknowledge bool   `json:"acknowledge"`
 }
+
+var errAuthenticationUnavailable = errors.New("authentication temporarily unavailable")
 
 type createPayload struct {
 	DeviceName string `json:"deviceName"`
@@ -73,11 +76,45 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, role routing.Role
 		return
 	}
 
-	peer, err := s.handshake(r.Context(), connection, role, first)
+	// A diagnostic probe never registers a peer, replaces a live Bridge, or emits
+	// online/offline events. Old clients keep their original handshake behavior.
+	if first.Type == "device.auth.check" && role == routing.RoleBridge {
+		ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+		defer cancel()
+		var payload helloPayload
+		valid, paired := false, false
+		code := "UNAUTHORIZED"
+		if json.Unmarshal(first.Payload, &payload) == nil {
+			valid, err = s.pairing.Authenticate(ctx, payload.DeviceID, string(role), payload.Credential)
+			if err == nil && valid {
+				paired, err = s.pairing.IsPaired(ctx, payload.DeviceID)
+			}
+			if err != nil {
+				valid, code = false, "AUTH_UNAVAILABLE"
+			} else if valid {
+				code = "OK"
+			}
+		}
+		_ = wsjson.Write(ctx, connection, protocol.New("device.auth.result", first.RequestID, "", nil,
+			map[string]any{"authenticated": valid, "paired": paired, "code": code}))
+		return
+	}
+
+	authContext, cancelAuth := context.WithTimeout(r.Context(), 8*time.Second)
+	peer, err := s.handshake(authContext, connection, role, first)
+	cancelAuth()
 	if err != nil {
 		s.logger.Warn("websocket authentication failed", "role", role, "error", err)
-		_ = wsjson.Write(r.Context(), connection, protocol.Error(first.RequestID, "", "UNAUTHORIZED", "设备认证或配对失败。"))
-		_ = connection.Close(websocket.StatusPolicyViolation, "unauthorized")
+		code := "UNAUTHORIZED"
+		if errors.Is(err, errAuthenticationUnavailable) {
+			code = "AUTH_UNAVAILABLE"
+		}
+		_ = wsjson.Write(r.Context(), connection, protocol.Error(first.RequestID, "", code, "设备认证或配对失败。"))
+		if code == "AUTH_UNAVAILABLE" {
+			_ = connection.Close(websocket.StatusInternalError, "authentication unavailable")
+		} else {
+			_ = connection.Close(websocket.StatusPolicyViolation, "unauthorized")
+		}
 		return
 	}
 	connection.SetReadLimit(messageReadLimit)
@@ -128,8 +165,21 @@ func (s *Server) handshake(ctx context.Context, connection *websocket.Conn, role
 			return nil, err
 		}
 		valid, err := s.pairing.Authenticate(ctx, payload.DeviceID, string(role), payload.Credential)
-		if err != nil || !valid {
+		if err != nil {
+			return nil, errAuthenticationUnavailable
+		}
+		if !valid {
 			return nil, errors.New("invalid credential")
+		}
+		if payload.Acknowledge && role == routing.RoleBridge {
+			paired, err := s.pairing.IsPaired(ctx, payload.DeviceID)
+			if err != nil {
+				return nil, errAuthenticationUnavailable
+			}
+			if err := wsjson.Write(ctx, connection, protocol.New("device.authenticated", first.RequestID, payload.DeviceID, nil,
+				map[string]any{"authenticated": true, "paired": paired})); err != nil {
+				return nil, err
+			}
 		}
 		return routing.NewPeer(role, payload.DeviceID), nil
 
@@ -143,7 +193,7 @@ func (s *Server) handshake(ctx context.Context, connection *websocket.Conn, role
 		}
 		created, err := s.pairing.Create(ctx, payload.DeviceName)
 		if err != nil {
-			return nil, err
+			return nil, errAuthenticationUnavailable
 		}
 		if err := wsjson.Write(ctx, connection, protocol.New("pairing.created", first.RequestID, created.DeviceID, nil, created)); err != nil {
 			return nil, err

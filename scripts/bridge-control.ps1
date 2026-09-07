@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
     [ValidateSet('Start', 'Stop', 'Status', 'EnableAutostart', 'DisableAutostart')]
@@ -9,6 +9,30 @@ $ErrorActionPreference = 'Stop'
 $taskName = 'Codex Companion Bridge'
 $installRoot = Join-Path $env:LOCALAPPDATA 'CodexCompanion\Bridge'
 $target = Join-Path $installRoot 'CodexCompanion.Bridge.exe'
+
+function New-BridgeTaskAction {
+    # Scheduled Tasks do not inherit this PowerShell session's environment.
+    # Preserve explicit overrides so background run and local status use the same identity.
+    $arguments = 'run'
+    $options = [ordered]@{
+        CODEX_COMPANION_CONFIG_PATH = '--config'
+        CODEX_COMPANION_CREDENTIAL_PATH = '--credential-path'
+        CODEX_COMPANION_RELAY_URL = '--relay-url'
+        CODEX_EXECUTABLE = '--codex-executable'
+        CODEX_COMPANION_LOG_LEVEL = '--log-level'
+    }
+    foreach ($name in $options.Keys) {
+        $value = [Environment]::GetEnvironmentVariable($name)
+        if (-not [string]::IsNullOrWhiteSpace($value)) {
+            if ($value.Contains('"') -or $value.Contains("`r") -or $value.Contains("`n")) {
+                throw "Invalid quote or newline in $name"
+            }
+            if ($name -eq 'CODEX_COMPANION_CONFIG_PATH') { $value = [IO.Path]::GetFullPath($value) }
+            $arguments += ' ' + $options[$name] + ' "' + $value + '"'
+        }
+    }
+    New-ScheduledTaskAction -Execute $target -Argument $arguments -WorkingDirectory $installRoot
+}
 
 function Register-BridgeTask {
     param([bool]$Autostart)
@@ -21,7 +45,7 @@ function Register-BridgeTask {
     # an old logon trigger when a replacement task omits -Trigger.
     Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
 
-    $actionDefinition = New-ScheduledTaskAction -Execute $target -Argument 'run' -WorkingDirectory $installRoot
+    $actionDefinition = New-BridgeTaskAction
     $settings = New-ScheduledTaskSettingsSet `
         -StartWhenAvailable `
         -RestartCount 3 `
@@ -58,6 +82,40 @@ function Stop-BridgeProcesses {
         Stop-Process -Force
 }
 
+function Get-BridgeRuntime {
+    if (-not (Test-Path -LiteralPath $target)) { return $null }
+    # The executable loads the same effective config and credential path as run/pair.
+    try {
+        $output = & $target status --runtime 2>$null
+        if ($LASTEXITCODE -eq 0) { return ($output | Out-String | ConvertFrom-Json) }
+    }
+    catch { return $null }
+    return $null
+}
+
+function Get-BridgeStatus {
+    $task = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+    $runtime = Get-BridgeRuntime
+    $processes = @(Get-Process -Name 'CodexCompanion.Bridge' -ErrorAction SilentlyContinue |
+        Where-Object { $_.Path -eq $target })
+    $running = ($processes.Count -gt 0) -or ($null -ne $runtime -and $runtime.processRunning)
+    $known = $null -ne $runtime -and $runtime.processRunning -and $runtime.state -ne 'Unavailable'
+    [pscustomobject]@{
+        Installed = Test-Path -LiteralPath $target
+        ProcessRunning = $running
+        ProcessIds = @($processes | Select-Object -ExpandProperty Id)
+        RuntimeState = if ($known) { $runtime.state } elseif ($running) { 'Unavailable' } else { 'Stopped' }
+        RelayReachable = if ($known) { $runtime.relayReachable } else { $null }
+        Connected = if ($known) { $runtime.connected } elseif ($running) { $null } else { $false }
+        Authenticated = if ($known) { $runtime.authenticated } elseif ($running) { $null } else { $false }
+        PairingRequired = if ($known) { $runtime.pairingRequired } elseif ($running) { $null } else { $false }
+        Ready = $known -and $runtime.ready
+        LastError = if ($null -ne $runtime) { $runtime.lastError } else { $null }
+        TaskState = if ($null -eq $task) { 'NotRegistered' } else { [string]$task.State }
+        Autostart = Test-BridgeAutostart
+    }
+}
+
 switch ($Action) {
     'Start' {
         if (-not (Test-Path -LiteralPath $target)) {
@@ -66,35 +124,37 @@ switch ($Action) {
         if ($null -eq (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue)) {
             Register-BridgeTask -Autostart $false
         }
-        $running = @(Get-Process -Name 'CodexCompanion.Bridge' -ErrorAction SilentlyContinue |
-            Where-Object { $_.Path -eq $target }).Count -gt 0
-        if ($running) {
-            Write-Output 'Codex Companion Bridge is already running.'
-            break
+        $status = Get-BridgeStatus
+        if (-not $status.ProcessRunning) {
+            Set-ScheduledTask -TaskName $taskName -Action (New-BridgeTaskAction) | Out-Null
+            Start-ScheduledTask -TaskName $taskName
         }
-        Start-ScheduledTask -TaskName $taskName
-        Start-Sleep -Milliseconds 800
-        $task = Get-ScheduledTask -TaskName $taskName
-        if ($task.State -ne 'Running') {
-            throw "Bridge failed to start. Scheduled task state: $($task.State)"
+        $deadline = (Get-Date).AddSeconds(15)
+        do {
+            Start-Sleep -Milliseconds 500
+            $status = Get-BridgeStatus
+            if ($status.Ready -or $status.PairingRequired -or $status.RuntimeState -eq 'StartupFailed') { break }
+        } while ((Get-Date) -lt $deadline)
+        if (-not $status.ProcessRunning) {
+            throw "Bridge failed to start or exited. $($status.LastError) Run: `"$target`" doctor"
         }
-        Write-Output 'Codex Companion Bridge started in the background.'
+        if ($status.Ready) {
+            Write-Output 'Bridge process started. Connection status: Authenticated / Ready.'
+        }
+        elseif ($status.PairingRequired) {
+            Write-Warning "Bridge process started, but pairing is required. Stop Bridge, then run: `"$target`" pair"
+        }
+        else {
+            Write-Warning "Bridge process exists; runtime is $($status.RuntimeState), not ready. It has been left running. Run: `"$target`" doctor"
+        }
+        $status | Format-List
     }
     'Stop' {
         Stop-BridgeProcesses
         Write-Output 'Codex Companion Bridge stopped.'
     }
     'Status' {
-        $task = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
-        $processes = @(Get-Process -Name 'CodexCompanion.Bridge' -ErrorAction SilentlyContinue |
-            Where-Object { $_.Path -eq $target })
-        [pscustomobject]@{
-            Installed = Test-Path -LiteralPath $target
-            Running = $processes.Count -gt 0
-            ProcessIds = @($processes | Select-Object -ExpandProperty Id)
-            TaskState = if ($null -eq $task) { 'NotRegistered' } else { [string]$task.State }
-            Autostart = Test-BridgeAutostart
-        } | Format-List
+        Get-BridgeStatus | Format-List
     }
     'EnableAutostart' {
         $wasRunning = @(Get-Process -Name 'CodexCompanion.Bridge' -ErrorAction SilentlyContinue |

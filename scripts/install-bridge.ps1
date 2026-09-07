@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [switch]$EnableAutostart
 )
@@ -26,29 +26,13 @@ if ($LASTEXITCODE -ne 0) {
     throw "Bridge setup failed with exit code $LASTEXITCODE"
 }
 
-$configPath = Join-Path $env:LOCALAPPDATA 'CodexCompanion\config.json'
-$config = if (Test-Path -LiteralPath $configPath) {
-    Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
-}
-else {
-    $null
-}
-$credentialPath = if ($config -and $config.credentialPath) {
-    $config.credentialPath
-}
-else {
-    Join-Path $env:LOCALAPPDATA 'CodexCompanion\bridge-credential.json'
-}
-
-if (-not (Test-Path -LiteralPath $credentialPath)) {
-    Write-Output '首次安装需要完成一次手机配对。Bridge 将在当前窗口运行并显示配对码。'
-    $pairingProcess = Start-Process -FilePath $target -ArgumentList 'run' -WorkingDirectory $installRoot -NoNewWindow -PassThru
-    Read-Host '请在手机完成配对，确认凭据文件生成后按 Enter 继续'
-    if (-not $pairingProcess.HasExited) {
-        Stop-Process -Id $pairingProcess.Id -Force
-    }
-    if (-not (Test-Path -LiteralPath $credentialPath)) {
-        Write-Warning '未检测到 Bridge 凭据，首次手动启动时仍需要完成配对。'
+$pairingStatus = & $target status --pairing | Out-String | ConvertFrom-Json
+if ($LASTEXITCODE -ne 0) { throw 'Unable to read effective Bridge pairing configuration.' }
+if (-not $pairingStatus.credentialExists) {
+    Write-Output '首次安装需要完成手机配对；完成后命令会自动退出。'
+    & $target pair
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warning '配对尚未完成。安装后请运行 CodexCompanion.Bridge.exe pair 重试。'
     }
 }
 

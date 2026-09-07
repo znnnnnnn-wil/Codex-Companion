@@ -34,11 +34,17 @@ func TestPostgresStorePairingAndAuthentication(t *testing.T) {
 	if ok, err := store.Authenticate(ctx, deviceID, "bridge", bridgeHash[:]); err != nil || !ok {
 		t.Fatalf("bridge auth failed: %v", err)
 	}
+	if paired, err := store.IsPaired(ctx, deviceID); err != nil || paired {
+		t.Fatalf("unclaimed device pairing status incorrect: %v", err)
+	}
 	claimedDevice, err := store.ClaimPairing(ctx, code, webHash[:], time.Now())
 	if err != nil || claimedDevice != deviceID {
 		t.Fatalf("claim failed: %v", err)
 	}
 	if ok, err := store.Authenticate(ctx, deviceID, "web", webHash[:]); err != nil || !ok {
 		t.Fatalf("web auth failed: %v", err)
+	}
+	if paired, err := store.IsPaired(ctx, deviceID); err != nil || !paired {
+		t.Fatalf("claimed device pairing status incorrect: %v", err)
 	}
 }

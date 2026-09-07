@@ -6,7 +6,7 @@ using CodexCompanion.Bridge.Codex.History;
 using CodexCompanion.Bridge.Codex.Models;
 using CodexCompanion.Bridge.Pairing;
 using Microsoft.Extensions.Logging;
-using QRCoder;
+using CodexCompanion.Bridge.Runtime;
 
 namespace CodexCompanion.Bridge.Relay;
 
@@ -15,7 +15,8 @@ public sealed class BridgeRelayClient(
     BridgeCredentialStore credentialStore,
     ICodexHistoryAdapter history,
     ICodexDesktopAdapter desktop,
-    ILogger<BridgeRelayClient> logger)
+    ILogger<BridgeRelayClient> logger,
+    BridgeRuntime? runtime = null)
 {
     private static readonly JsonSerializerOptions WebJson = new(JsonSerializerDefaults.Web);
     private const int MaxRelayMessageBytes = 18 * 1024 * 1024;
@@ -38,10 +39,24 @@ public sealed class BridgeRelayClient(
             {
                 break;
             }
+            catch (Exception exception) when (exception is PairingRequiredException or CredentialException)
+            {
+                runtime?.Set("PairingRequired", reachable: exception is PairingRequiredException ? true : null,
+                    pairingRequired: true, error: exception.Message);
+                Console.WriteLine(exception.Message);
+                // Keep the background process observable, but do not repeatedly submit
+                // rejected credentials or silently replace a device identity.
+                try { await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken); }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
+                break;
+            }
             catch (Exception exception)
             {
-                logger.LogWarning(exception, "Relay connection lost; retrying in {DelaySeconds}s", backoff.TotalSeconds);
-                await Task.Delay(backoff, cancellationToken);
+                runtime?.Set("Reconnecting", reachable: exception is AuthenticationUnavailableException ? true : exception is WebSocketException ? false : null,
+                    error: exception is AuthenticationUnavailableException ? exception.Message : "连接或认证确认暂不可用；将重试，凭据已保留。若持续发生，请运行 doctor 并确认 Relay 已升级。");
+                logger.LogWarning("Relay connection interrupted ({ErrorType}); retrying in {DelaySeconds}s", exception.GetType().Name, backoff.TotalSeconds);
+                try { await Task.Delay(backoff, cancellationToken); }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { break; }
                 backoff = TimeSpan.FromSeconds(Math.Min(backoff.TotalSeconds * 2, 30));
             }
         }
@@ -49,56 +64,30 @@ public sealed class BridgeRelayClient(
 
     private async Task ConnectAndServeAsync(CancellationToken cancellationToken)
     {
+        var credential = credentialStore.Load();
+        Console.WriteLine(credential is null ? "未找到凭据。Pairing required." : "已找到保存的凭据，正在连接 Relay 并验证身份...");
+        runtime?.Set("Connecting", pairingRequired: credential is null);
         using var socket = new ClientWebSocket();
         socket.Options.KeepAliveInterval = TimeSpan.FromSeconds(20);
-        await socket.ConnectAsync(relayUri, cancellationToken);
-
-        var credential = credentialStore.Load();
-        string deviceId;
+        socket.Options.KeepAliveTimeout = TimeSpan.FromSeconds(10);
+        using var handshakeTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        handshakeTimeout.CancelAfter(TimeSpan.FromSeconds(10));
+        await socket.ConnectAsync(relayUri, handshakeTimeout.Token);
+        runtime?.Set("Authenticating", reachable: true, connected: true, pairingRequired: credential is null);
+        bool paired;
         if (credential is null)
         {
-            var requestId = Guid.NewGuid().ToString();
-            await SendAsync(socket, TransportEnvelope.Create(
-                "pairing.create", requestId, null, null,
-                new { deviceName = Environment.MachineName }), cancellationToken);
-            var response = await ReceiveAsync(socket, cancellationToken);
-            if (response.Type != "pairing.created")
-            {
-                throw new BridgeException(BridgeErrorCode.Unauthorized, "Relay 未能创建设备配对。");
-            }
-            var pairing = response.Payload.Deserialize<PairingCreated>(WebJson)
-                ?? throw new InvalidDataException("pairing.created payload 无效。");
-            credential = new BridgeCredential(pairing.DeviceId, pairing.BridgeCredential);
-            credentialStore.Save(credential);
-            deviceId = pairing.DeviceId;
-            Console.WriteLine($"Codex Companion 配对码：{pairing.Code}（10 分钟内有效）");
-            var pageUri = new UriBuilder(relayUri)
-            {
-                Scheme = relayUri.Scheme.Equals("wss", StringComparison.OrdinalIgnoreCase) ? "https" : "http",
-                Path = "/",
-                Query = $"pair={Uri.EscapeDataString(pairing.Code)}"
-            }.Uri;
-            Console.WriteLine($"手机配对地址：{pageUri}");
-            try
-            {
-                using var generator = new QRCodeGenerator();
-                using var data = generator.CreateQrCode(pageUri.ToString(), QRCodeGenerator.ECCLevel.M);
-                Console.WriteLine(new AsciiQRCode(data).GetGraphic(1));
-            }
-            catch (Exception exception)
-            {
-                logger.LogDebug(exception, "Unable to render pairing QR code");
-            }
+            runtime?.Set("PairingRequired", reachable: true, connected: true, pairingRequired: true);
+            credential = await RelayHandshake.CreatePairingAsync(socket, relayUri, credentialStore, handshakeTimeout.Token);
+            paired = false;
         }
         else
         {
-            deviceId = credential.DeviceId;
-            await SendAsync(socket, TransportEnvelope.Create(
-                "device.hello", Guid.NewGuid().ToString(), deviceId, null,
-                new { deviceId, credential = credential.Credential }), cancellationToken);
+            paired = await RelayHandshake.AuthenticateAsync(socket, credential, handshakeTimeout.Token);
         }
-
-        logger.LogInformation("Bridge connected to Relay for device {DeviceId}", deviceId);
+        var deviceId = credential.DeviceId;
+        runtime?.Set(paired ? "Ready" : "PairingRequired", reachable: true, connected: true, authenticated: true, pairingRequired: !paired);
+        Console.WriteLine(paired ? "Authenticated. Bridge 正在运行，按 Ctrl+C 停止。" : "Bridge 身份已认证，等待手机配对。配对码不可用时，请停止后运行 pair。");
         await SendStatusAsync(socket, deviceId, cancellationToken);
         using var connectionCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var poller = PollActiveThreadAsync(socket, deviceId, connectionCancellation.Token);
@@ -107,6 +96,13 @@ public sealed class BridgeRelayClient(
             while (socket.State == WebSocketState.Open && !cancellationToken.IsCancellationRequested)
             {
                 var envelope = await ReceiveAsync(socket, cancellationToken);
+                // Request-level authorization errors are not a credential verdict.
+                if (envelope.Type == "pairing.completed")
+                {
+                    runtime?.Set("Ready", reachable: true, connected: true, authenticated: true);
+                    Console.WriteLine("配对完成。Authenticated. Bridge 正在运行，按 Ctrl+C 停止。");
+                    continue;
+                }
                 try
                 {
                     await HandleAsync(socket, deviceId, envelope, cancellationToken);
@@ -598,7 +594,6 @@ public sealed class BridgeRelayClient(
             || (hasAttachments && actual.EndsWith(wanted, StringComparison.Ordinal));
     }
 
-    private sealed record PairingCreated(string DeviceId, string Code, string BridgeCredential, long ExpiresAt);
     private sealed record ThreadCreatePayload(string? Cwd);
     private sealed record MessageSendPayload(string? Text, IReadOnlyList<MessageAttachmentPayload>? Attachments, string? Cwd);
     private sealed record MediaReadPayload(string? ItemId);

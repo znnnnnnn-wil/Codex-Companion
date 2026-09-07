@@ -64,3 +64,9 @@ func (s *MemoryStore) Authenticate(_ context.Context, deviceID, role string, tok
 }
 
 func (s *MemoryStore) Close() error { return nil }
+
+func (s *MemoryStore) IsPaired(_ context.Context, deviceID string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.credentials[deviceID]["web"]) > 0, nil
+}

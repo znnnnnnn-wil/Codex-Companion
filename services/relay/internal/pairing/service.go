@@ -79,6 +79,10 @@ func HashCredential(credential string) []byte {
 	return hash[:]
 }
 
+func (s *Service) IsPaired(ctx context.Context, deviceID string) (bool, error) {
+	return s.store.IsPaired(ctx, deviceID)
+}
+
 func randomToken(bytes int) (string, error) {
 	value := make([]byte, bytes)
 	if _, err := rand.Read(value); err != nil {
