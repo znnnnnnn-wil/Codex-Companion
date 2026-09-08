@@ -13,6 +13,13 @@ trap cleanup EXIT
 docker compose -f "$ROOT/compose.yml" up -d --build
 for _ in {1..30}; do
   if curl --fail --silent http://127.0.0.1/healthz >/dev/null; then
+    for path in / /index.html /sw.js /registerSW.js /version.json /manifest.webmanifest; do
+      curl --fail --silent --head "http://127.0.0.1$path" | tr -d '\r' | grep -qi '^Cache-Control: no-store'
+    done
+    asset=$(curl --fail --silent http://127.0.0.1/ | grep -oE '/assets/app-[^" ]+\.js' | head -1)
+    test -n "$asset"
+    curl --fail --silent --head "http://127.0.0.1$asset" | tr -d '\r' | grep -qi '^Cache-Control: public,.*immutable'
+    curl --fail --silent http://127.0.0.1/version.json | grep -q '"version"'
     echo "compose smoke test passed"
     exit 0
   fi
