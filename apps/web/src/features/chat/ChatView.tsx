@@ -32,7 +32,7 @@ export function ChatView({ thread, draftCwd, items, media, pending, online, code
   const fileInputRef = useRef<HTMLInputElement>(null)
   const attachmentsRef = useRef<SelectedAttachment[]>([])
 
-  useEffect(() => endRef.current?.scrollIntoView({ behavior: 'smooth' }), [items, pending, codexState])
+  useEffect(() => { void endRef.current?.scrollIntoView({ behavior: 'smooth', inline: 'nearest' }) }, [items, pending, codexState])
 
   useEffect(() => { attachmentsRef.current = attachments }, [attachments])
   useEffect(() => () => attachmentsRef.current.forEach((attachment) => {
