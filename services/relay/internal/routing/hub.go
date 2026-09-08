@@ -183,7 +183,7 @@ func (h *Hub) deliver(peer *Peer, envelope protocol.Envelope) bool {
 
 func allowedWebType(value string) bool {
 	switch value {
-	case "thread.list.request", "thread.create.request", "thread.read.request", "media.read.request", "message.send", "codex.stop":
+	case "account.rateLimits.request", "thread.list.request", "thread.create.request", "thread.read.request", "media.read.request", "message.send", "codex.stop":
 		return true
 	default:
 		return false
@@ -192,7 +192,7 @@ func allowedWebType(value string) bool {
 
 func allowedBridgeType(value string) bool {
 	switch value {
-	case "thread.list.response", "thread.create.response", "thread.create.failed", "thread.read.response", "media.read.response", "thread.updated",
+	case "account.rateLimits.response", "thread.list.response", "thread.create.response", "thread.create.failed", "thread.read.response", "media.read.response", "thread.updated",
 		"message.accepted", "message.confirmed", "message.failed",
 		"codex.stop.response", "codex.stop.failed",
 		"bridge.status", "codex.status", "error":
@@ -213,7 +213,7 @@ func isBroadcastType(value string) bool {
 
 func isTerminalResponse(value string) bool {
 	switch value {
-	case "thread.list.response", "thread.create.response", "thread.create.failed", "thread.read.response", "media.read.response", "message.confirmed", "message.failed",
+	case "account.rateLimits.response", "thread.list.response", "thread.create.response", "thread.create.failed", "thread.read.response", "media.read.response", "message.confirmed", "message.failed",
 		"codex.stop.response", "codex.stop.failed", "error":
 		return true
 	default:

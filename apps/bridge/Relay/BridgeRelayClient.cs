@@ -1,6 +1,7 @@
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
+using CodexCompanion.Bridge.Codex.AppServer;
 using CodexCompanion.Bridge.Codex.Desktop;
 using CodexCompanion.Bridge.Codex.History;
 using CodexCompanion.Bridge.Codex.Models;
@@ -16,7 +17,8 @@ public sealed class BridgeRelayClient(
     ICodexHistoryAdapter history,
     ICodexDesktopAdapter desktop,
     ILogger<BridgeRelayClient> logger,
-    BridgeRuntime? runtime = null)
+    BridgeRuntime? runtime = null,
+    AccountRateLimitsReader? usageReader = null)
 {
     private static readonly JsonSerializerOptions WebJson = new(JsonSerializerDefaults.Web);
     private const int MaxRelayMessageBytes = 18 * 1024 * 1024;
@@ -136,6 +138,21 @@ public sealed class BridgeRelayClient(
     {
         switch (envelope.Type)
         {
+            case "account.rateLimits.request":
+                try
+                {
+                    if (usageReader is null) throw new InvalidOperationException();
+                    var usage = await usageReader.ReadAsync(cancellationToken);
+                    await SendAsync(socket, TransportEnvelope.Create(
+                        "account.rateLimits.response", envelope.RequestId, deviceId, null, usage), cancellationToken);
+                }
+                catch (Exception exception) when (exception is not OperationCanceledException)
+                {
+                    await SendErrorAsync(socket, deviceId, envelope, "USAGE_UNAVAILABLE",
+                        "暂时无法读取额度，请确认电脑上的 Codex 已登录 ChatGPT，并升级 Codex CLI 后重试。", cancellationToken);
+                }
+                break;
+
             case "thread.list.request":
                 var threads = await history.ListThreadsAsync(cancellationToken);
                 await SendAsync(socket, TransportEnvelope.Create(

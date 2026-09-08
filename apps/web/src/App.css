@@ -148,3 +148,15 @@
   .chat-panel { height: 100%; }.chat-toolbar { min-height: 59px; padding: 10px 13px; }.chat-toolbar p { max-width: 54vw; }.message-scroll { padding: 20px 14px 20px; }.message-bubble { max-width: 91%; font-size: 13px; line-height: 1.55; }.message-row.user .message-bubble { padding: 9px 12px; }.composer-area { width: auto; min-width: 0; margin: 0 9px max(9px, env(safe-area-inset-bottom)); }.composer { min-width: 0; border-radius: 15px; }.composer textarea { min-width: 0; }.ghost-button { padding: 5px 7px; }
   .pairing-card { padding: 27px 23px; border-radius: 20px; }
 }
+
+.usage-panel { flex: 0 0 auto; max-height: 40dvh; overflow-y: auto; padding: 13px 17px; border-top: 1px solid var(--line); font-size: 12px; }
+.usage-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.usage-heading button { border: 0; background: transparent; color: var(--teal); padding: 6px; cursor: pointer; }
+.usage-heading button:disabled { color: var(--muted); cursor: default; }
+.usage-panel p { color: var(--muted); line-height: 1.5; overflow-wrap: anywhere; }
+.usage-bucket { margin-top: 10px; }
+.usage-bucket-name { display: block; overflow-wrap: anywhere; margin-bottom: 7px; }
+.usage-window { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 5px 8px; margin-top: 9px; }
+.usage-window time { grid-column: 1 / -1; color: var(--muted); font-size: 10px; }
+.usage-window progress { grid-column: 1 / -1; width: 100%; height: 4px; accent-color: var(--teal); }
+.usage-note { margin-bottom: 0; font-size: 10px; }

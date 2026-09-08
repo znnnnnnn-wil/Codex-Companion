@@ -64,6 +64,46 @@ func TestOfflineDeviceReturnsCorrelatedError(t *testing.T) {
 	}
 }
 
+func TestAccountQuotaRoutesOnlyToRequestingDeviceAndPeer(t *testing.T) {
+	hub := NewHub()
+	bridge := NewPeer(RoleBridge, "device")
+	wrongBridge := NewPeer(RoleBridge, "other")
+	web := NewPeer(RoleWeb, "device")
+	otherTab := NewPeer(RoleWeb, "device")
+	otherDevice := NewPeer(RoleWeb, "other")
+	for _, peer := range []*Peer{bridge, wrongBridge, web, otherTab, otherDevice} {
+		hub.Register(peer)
+		drain(peer)
+	}
+	request := protocol.New("account.rateLimits.request", "quota", "spoofed", nil, map[string]any{})
+	if err := hub.Handle(web, request); err != nil {
+		t.Fatal(err)
+	}
+	if got := receive(t, bridge); got.DeviceID != "device" {
+		t.Fatal("device was not normalized")
+	}
+	response := protocol.New("account.rateLimits.response", "quota", "device", nil, map[string]any{"buckets": []any{}})
+	if err := hub.Handle(wrongBridge, response); err == nil {
+		t.Fatal("cross-device reply accepted")
+	}
+	if err := hub.Handle(bridge, response); err != nil {
+		t.Fatal(err)
+	}
+	if got := receive(t, web); got.Type != "account.rateLimits.response" {
+		t.Fatal("missing quota response")
+	}
+	assertNoMessage(t, otherTab)
+	assertNoMessage(t, otherDevice)
+	if err := hub.Handle(bridge, response); err == nil {
+		t.Fatal("quota response was not terminal")
+	}
+	for _, method := range []string{"account/logout", "account.rateLimitResetCredit.consume", "account/login/start"} {
+		if allowedWebType(method) {
+			t.Fatalf("account mutation allowed: %s", method)
+		}
+	}
+}
+
 func TestBridgeDisconnectBroadcastsOffline(t *testing.T) {
 	hub := NewHub()
 	bridge := NewPeer(RoleBridge, "device")
