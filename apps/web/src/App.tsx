@@ -5,6 +5,7 @@ import { StatusBar, Style } from '@capacitor/status-bar'
 import { CompanionSocket, relayWebSocketUrl } from './api/CompanionSocket'
 import { clearCredentialAsync, loadCredentialAsync } from './api/credential'
 import { ThreadList } from './components/ThreadList'
+import { WebVersion } from './components/WebVersion'
 import { ChatView } from './features/chat/ChatView'
 import { encodeAttachments } from './features/chat/attachments'
 import { ThreadStore } from './features/threads/ThreadStore'
@@ -289,6 +290,7 @@ function Companion({ credential, onUnpair }: { credential: DeviceCredential; onU
             canCreate={state.pcOnline && state.connection === 'connected'}
           />
           <UsagePanel store={usage} />
+          <WebVersion />
           <div className="sidebar-footer">
             <span>{connectionLabel(state.connection)}</span>
             <button type="button" onClick={onUnpair}>解除本机浏览器绑定</button>

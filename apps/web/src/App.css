@@ -160,3 +160,9 @@
 .usage-window time { grid-column: 1 / -1; color: var(--muted); font-size: 10px; }
 .usage-window progress { grid-column: 1 / -1; width: 100%; height: 4px; accent-color: var(--teal); }
 .usage-note { margin-bottom: 0; font-size: 10px; }
+
+.web-version { flex: 0 0 auto; display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 17px; color: var(--muted); font-size: 10px; }
+.web-version button { border: 0; background: transparent; padding: 6px 0; color: var(--teal); cursor: pointer; }
+.sidebar-header, .sidebar-footer { flex-shrink: 0; }
+.thread-list { min-height: 0; }
+.chat-toolbar, .composer-area { min-width: 0; max-width: 100%; }

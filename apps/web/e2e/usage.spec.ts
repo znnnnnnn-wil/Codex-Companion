@@ -11,7 +11,7 @@ test('phone shows real quota response, refreshes, and clears offline values', as
       const request = JSON.parse(String(raw))
       const send = (type: string, payload: unknown) => socket.send(JSON.stringify({ type, payload, requestId: request.requestId, timestamp: Date.now() }))
       if (request.type === 'device.hello') send('device.online', {})
-      if (request.type === 'thread.list.request') send('thread.list.response', { threads: [] })
+      if (request.type === 'thread.list.request') send('thread.list.response', { threads: Array.from({ length: 175 }, (_, i) => ({ threadId: `thread-${i}`, title: `会话 ${i}：长会话列表不能挤掉额度卡片`, cwd: 'E:\\codexDestop', updatedAt: Date.now(), status: 'idle', source: 'desktop' })) })
       if (request.type === 'account.rateLimits.request') {
         requests++
         const now = Math.floor(Date.now() / 1000)
@@ -21,6 +21,7 @@ test('phone shows real quota response, refreshes, and clears offline values', as
   })
   await page.goto('/')
   await page.getByRole('button', { name: '打开会话列表' }).click()
+  await page.locator('.thread-group-toggle').click()
   const panel = page.getByRole('region', { name: '剩余用量' })
   await expect(panel.getByText('96%', { exact: true })).toBeVisible()
   await expect(panel.getByText('84%', { exact: true })).toBeVisible()
@@ -28,6 +29,11 @@ test('phone shows real quota response, refreshes, and clears offline values', as
   await expect(panel.getByText('1 周', { exact: true })).toBeVisible()
   await expect(panel.locator('time')).toHaveCount(2)
   await expect.poll(async () => (await page.locator('.sidebar').boundingBox())!.x).toBe(0)
+  const panelBounds = await panel.boundingBox()
+  expect(panelBounds!.y).toBeGreaterThanOrEqual(0)
+  expect(panelBounds!.y + panelBounds!.height).toBeLessThanOrEqual(844)
+  expect(await page.locator('.thread-list').evaluate(el => el.scrollHeight > el.clientHeight)).toBe(true)
+  await expect(page.getByText('网页 v0.1.8', { exact: true })).toBeVisible()
   await page.screenshot({ path: 'test-results/usage-phone.png' })
   await page.getByRole('button', { name: '刷新额度' }).click()
   await expect(panel.getByText('95%', { exact: true })).toBeVisible()
