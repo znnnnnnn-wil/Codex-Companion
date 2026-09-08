@@ -245,7 +245,7 @@ public static class Program
                 store,
                 history,
                 desktop,
-                loggerFactory.CreateLogger<BridgeRelayClient>(), runtime);
+                loggerFactory.CreateLogger<BridgeRelayClient>(), runtime, new AccountRateLimitsReader(appServer));
             await relay.RunAsync(cancellation.Token);
             return 0;
         }

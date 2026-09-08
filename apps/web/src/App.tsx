@@ -8,6 +8,8 @@ import { ThreadList } from './components/ThreadList'
 import { ChatView } from './features/chat/ChatView'
 import { encodeAttachments } from './features/chat/attachments'
 import { ThreadStore } from './features/threads/ThreadStore'
+import { UsageStore } from './features/usage/UsageStore'
+import { UsagePanel } from './features/usage/UsagePanel'
 import { PairingPage } from './pages/PairingPage'
 import type { DeviceCredential, Envelope, ThreadItem, ThreadSummary } from './protocol/types'
 import './App.css'
@@ -44,6 +46,7 @@ function Companion({ credential, onUnpair }: { credential: DeviceCredential; onU
   const [store] = useState(() => new ThreadStore())
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot)
   const socketRef = useRef<CompanionSocket | null>(null)
+  const [usage] = useState(() => new UsageStore(() => socketRef.current!.sendRequest('account.rateLimits.request', undefined, {})))
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [stopping, setStopping] = useState(false)
   const [draftCwd, setDraftCwd] = useState<string>()
@@ -79,6 +82,7 @@ function Companion({ credential, onUnpair }: { credential: DeviceCredential; onU
     const removeState = socket.onState((connection) => {
       store.setConnection(connection)
       if (connection === 'disconnected') {
+        usage.setOnline(false)
         for (const itemId of mediaRequests.current.values()) store.setMediaFailed(itemId)
         mediaRequests.current.clear()
         requestedMedia.current.clear()
@@ -94,6 +98,9 @@ function Companion({ credential, onUnpair }: { credential: DeviceCredential; onU
       }
     })
     const removeMessage = socket.onMessage((envelope: Envelope) => {
+      if (usage.apply(envelope)) return
+      if (envelope.type === 'device.online') usage.setOnline(true)
+      if (envelope.type === 'device.offline') usage.setOnline(false)
       store.apply(envelope)
       const mediaItemId = envelope.requestId ? mediaRequests.current.get(envelope.requestId) : undefined
       if (mediaItemId && ['media.read.response', 'error'].includes(envelope.type)) {
@@ -170,6 +177,9 @@ function Companion({ credential, onUnpair }: { credential: DeviceCredential; onU
       }
     })
     socket.start()
+    const refreshUsage = () => { if (!document.hidden) usage.refresh(true) }
+    const usageTimer = setInterval(refreshUsage, 60_000)
+    document.addEventListener('visibilitychange', refreshUsage)
     const resumeListener = Capacitor.isNativePlatform()
       ? CapacitorApp.addListener('resume', () => {
           socket.stop()
@@ -177,13 +187,17 @@ function Companion({ credential, onUnpair }: { credential: DeviceCredential; onU
         })
       : null
     return () => {
+      clearInterval(usageTimer)
+      document.removeEventListener('visibilitychange', refreshUsage)
+      usage.setOnline(false)
+      usage.dispose()
       if (resumeListener) void resumeListener.then((handle) => handle.remove())
       removeState()
       removeMessage()
       socket.stop()
       socketRef.current = null
     }
-  }, [credential, store])
+  }, [credential, store, usage])
 
   const activeThread = state.threads.find((thread) => thread.threadId === state.activeThreadId)
 
@@ -274,6 +288,7 @@ function Companion({ credential, onUnpair }: { credential: DeviceCredential; onU
             creatingCwd={creatingCwd}
             canCreate={state.pcOnline && state.connection === 'connected'}
           />
+          <UsagePanel store={usage} />
           <div className="sidebar-footer">
             <span>{connectionLabel(state.connection)}</span>
             <button type="button" onClick={onUnpair}>解除本机浏览器绑定</button>
